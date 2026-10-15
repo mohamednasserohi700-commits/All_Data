@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+{% block title %}الدفاتر الفارغة والمستخدمة{% endblock %}
+{% block page_title %}📖 الدفاتر الفارغة والمستخدمة{% endblock %}
+{% block page_subtitle %}مراقبة حالة الدفاتر الفارغة والمستخدمة{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+      --empty-color: #f59e0b;
+      --used-color: #10b981;
+      --empty-bg: #fffbf0;
+      --empty-border: #fcd34d;
+      --used-bg: #f0fdf4;
+      --used-border: #bbf7d0;
+    }
+
+
+
+    /* ─── قسم التصفية ──────────────────────────────────────────── */
+    .filter-section {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 32px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      border: 2px solid #f0e6db;
+    }
+
+    .filter-title {
+      margin: 0 0 20px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #3a2a1e;
+    }
+
+    .filter-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      align-items: flex-end;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .filter-group.button-group {
+      display: flex;
+      flex-direction: row;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .filter-label {
+      font-weight: 600;
+      color: #3a2a1e;
+      font-size: 0.95rem;
+    }
+
+    .filter-select {
+      padding: 12px 14px;
+      border: 2px solid #d4c5b5;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      color: #3a2a1e;
+      background: white;
+      font-family: 'Cairo', 'Tajawal', sans-serif;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .filter-select:hover {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .btn-filter, .btn-reset {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 0.95rem;
+      font-family: 'Cairo', 'Tajawal', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-filter {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      flex: 1;
+    }
+
+    .btn-filter:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-reset {
+      background: #f3f0ed;
+      color: #8a7460;
+      border: 2px solid #d4c5b5;
+      flex: 1;
+      text-decoration: none;
+    }
+
+    .btn-reset:hover {
+      background: #e8dfd5;
+      color: #5a4a40;
+    }
+
+    .filter-status {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #d4c5b5;
+    }
+
+    .status-text {
+      margin: 0;
+      color: #047857;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .badge-status {
+      background: rgba(16, 185, 129, 0.15);
+      padding: 4px 12px;
+      border-radius: 8px;
+      color: #047857;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 768px) {
+      .filter-form {
+        grid-template-columns: 1fr;
+      }
+
+      .filter-group.button-group {
+        flex-direction: column;
+      }
+
+      .btn-filter, .btn-reset {
+        width: 100%;
+      }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      text-align: center;
+      border-top: 4px solid #2563eb;
+    }
+
+    .stat-card.empty {
+      border-top-color: var(--empty-color);
+    }
+
+    .stat-card.used {
+      border-top-color: var(--used-color);
+    }
+
+    .stat-card .number {
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: #3a2a1e;
+      margin: 8px 0;
+    }
+
+    .stat-card .label {
+      font-size: 0.9rem;
+      color: #8a7460;
+      margin: 0;
+    }
+
+    .section {
+      margin-bottom: 48px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #3a2a1e;
+    }
+
+    .section-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+
+    .section.empty-section .section-icon {
+      background: rgba(245, 158, 11, 0.15);
+    }
+
+    .section.used-section .section-icon {
+      background: rgba(16, 185, 129, 0.15);
+    }
+
+    .books-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px;
+    }
+
+    .book-card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      border-left: 5px solid #999;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .book-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    .book-card.empty {
+      border-left-color: var(--empty-color);
+      background: var(--empty-bg);
+      border-top: 2px solid var(--empty-border);
+    }
+
+    .book-card.used {
+      border-left-color: var(--used-color);
+      background: var(--used-bg);
+      border-top: 2px solid var(--used-border);
+    }
+
+    .book-card .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .book-card.empty .badge {
+      background: rgba(245, 158, 11, 0.2);
+      color: #b45309;
+    }
+
+    .book-card.used .badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: #047857;
+    }
+
+    .book-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #3a2a1e;
+      margin: 0 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .book-name .index {
+      background: rgba(107, 58, 42, 0.08);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #8a7460;
+      font-weight: 600;
+    }
+
+    .book-info {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(107, 58, 42, 0.08);
+      font-size: 0.95rem;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .info-label {
+      color: #8a7460;
+      font-weight: 600;
+    }
+
+    .info-value {
+      color: #3a2a1e;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .info-value.book-type {
+      background: rgba(139, 92, 246, 0.1);
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: #6d28d9;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .progress-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 2px solid rgba(107, 58, 42, 0.1);
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(107, 58, 42, 0.15);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #0891b2);
+      border-radius: 10px;
+      transition: width 0.3s ease;
+    }
+
+    .book-card.used .progress-fill {
+      background: linear-gradient(90deg, var(--used-color), #6ee7b7);
+    }
+
+    .book-card.empty .progress-fill {
+      background: rgba(107, 58, 42, 0.3);
+      width: 0 !important;
+    }
+
+    .empty-message {
+      text-align: center;
+      padding: 48px 24px;
+      color: #8a7460;
+    }
+
+    .empty-message-icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+    }
+
+    .empty-message p {
+      margin: 8px 0;
+      font-size: 1rem;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: #8a7460;
+      font-size: 0.85rem;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(107, 58, 42, 0.1);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 1.6rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .books-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title {
+        font-size: 1.2rem;
+      }
+    }
+  </style>
+
+    <!-- أدوات التصفية -->
+    <div class="filter-section">
+      <h3 class="filter-title">🔍 التصفية والبحث</h3>
+      <form method="GET" class="filter-form" id="filterForm">
+        <div class="filter-group">
+          <label for="bookName" class="filter-label">📖 صنف الدفتر:</label>
+          <select id="bookName" name="book_name" class="filter-select">
+            <option value="all" {% if filter_book_name == 'all' %}selected{% endif %}>جميع الأصناف</option>
+            {% for bname in book_names %}
+              <option value="{{ bname }}" {% if filter_book_name == bname %}selected{% endif %}>{{ bname }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="location" class="filter-label">📍 الموقع:</label>
+          <select id="location" name="location" class="filter-select">
+            <option value="all" {% if filter_location == 'all' %}selected{% endif %}>جميع المواقع</option>
+            {% for loc in locations %}
+              <option value="{{ loc }}" {% if filter_location == loc %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-group button-group">
+          <button type="submit" class="btn-filter">
+            <span>🔎</span> تصفية النتائج
+          </button>
+          <a href="{{ url_for('empty_books') }}" class="btn-reset">
+            <span>↺</span> إعادة تعيين
+          </a>
+        </div>
+      </form>
+
+      <!-- شريط الحالة -->
+      <div class="filter-status">
+        {% if filter_book_name != 'all' or filter_location != 'all' %}
+          <p class="status-text">✅ <strong>تصفية نشطة:</strong> 
+            {% if filter_book_name != 'all' %}<span class="badge-status">📖 {{ filter_book_name }}</span>{% endif %}
+            {% if filter_location != 'all' %}<span class="badge-status">📍 {{ filter_location }}</span>{% endif %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- الإحصائيات -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div style="font-size: 1.8rem;">📦</div>
+        <div class="number">{{ total_dispensed }}</div>
+        <p class="label">إجمالي الدفاتر المصروفة</p>
+      </div>
+      <div class="stat-card empty">
+        <div style="font-size: 1.8rem;">📭</div>
+        <div class="number">{{ total_empty }}</div>
+        <p class="label">دفاتر فارغة (لم تُستخدم)</p>
+      </div>
+      <div class="stat-card used">
+        <div style="font-size: 1.8rem;">✅</div>
+        <div class="number">{{ total_used }}</div>
+        <p class="label">دفاتر مستخدمة</p>
+      </div>
+    </div>
+
+    <!-- الدفاتر الفارغة -->
+    <div class="section empty-section">
+      <div class="section-title">
+        <div class="section-icon">📭</div>
+        <span>الدفاتر الفارغة ({{ empty_books|length }})</span>
+      </div>
+      
+      {% if empty_books %}
+        <div class="books-grid">
+          {% for book in empty_books %}
+            <div class="book-card empty">
+              <span class="badge">🔔 فارغ</span>
+              
+              <div class="book-name">
+                <span>{{ book.book_name }}</span>
+                {% if book.book_index %}
+                  <span class="index">#{{ book.book_index }}</span>
+                {% endif %}
+              </div>
+
+              <div class="book-info">
+                <div class="info-row">
+                  <span class="info-label">النطاق:</span>
+                  <span class="info-value">{{ book.serial_range }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">الموقع:</span>
+                  <span class="info-value">{{ book.location }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">نوع الدفتر:</span>
+                  <span class="info-value book-type">📖 {{ book.book_name }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">تاريخ الصرف:</span>
+                  <span class="info-value">{{ book.dispensed_at }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">عدد الصفح:</span>
+                  <span class="info-value">{{ book.pages_per_book }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">الايصالات المسجلة:</span>
+                  <span class="info-value" style="color: #f59e0b;">لا توجد</span>
+                </div>
+              </div>
+
+              <div class="progress-section">
+                <div class="progress-label">
+                  <span>الحالة</span>
+                </div>
+                <div style="text-align: center; color: #f59e0b; font-weight: 700; font-size: 0.9rem;">
+                  ✨ لم يتم استخدام أي صفحة حتى الآن
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-message">
+          <div class="empty-message-icon">✨</div>
+          <p><strong>لا توجد دفاتر فارغة</strong></p>
+          <p>جميع الدفاتر المصروفة قيد الاستخدام</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- الدفاتر المستخدمة -->
+    <div class="section used-section">
+      <div class="section-title">
+        <div class="section-icon">✅</div>
+        <span>الدفاتر المستخدمة ({{ used_books|length }})</span>
+      </div>
+      
+      {% if used_books %}
+        <div class="books-grid">
+          {% for book in used_books %}
+            <div class="book-card used">
+              <span class="badge">✅ مستخدم</span>
+              
+              <div class="book-name">
+                <span>{{ book.book_name }}</span>
+                {% if book.book_index %}
+                  <span class="index">#{{ book.book_index }}</span>
+                {% endif %}
+              </div>
+
+              <div class="book-info">
+                <div class="info-row">
+                  <span class="info-label">النطاق:</span>
+                  <span class="info-value">{{ book.serial_range }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">الموقع:</span>
+                  <span class="info-value">{{ book.location }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">نوع الدفتر:</span>
+                  <span class="info-value book-type">📖 {{ book.book_name }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">تاريخ الصرف:</span>
+                  <span class="info-value">{{ book.dispensed_at }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">إجمالي الصفح:</span>
+                  <span class="info-value">{{ book.pages_per_book }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">صفح مستخدمة:</span>
+                  <span class="info-value" style="color: #10b981;">{{ book.receipts_count }} صفحة</span>
+                </div>
+              </div>
+
+              <div class="progress-section">
+                <div class="progress-label">
+                  <span>الصفح الفارغة المتبقية</span>
+                  <strong style="color: #047857;">{{ book.remaining_pages }} صفحة</strong>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: {{ book.usage_percent }}%"></div>
+                </div>
+                <div style="text-align: center; color: #8a7460; font-size: 0.8rem; margin-top: 8px;">
+                  استخدام: {{ book.usage_percent }}%
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-message">
+          <div class="empty-message-icon">📭</div>
+          <p><strong>لا توجد دفاتر مستخدمة</strong></p>
+          <p>جميع الدفاتر المصروفة لم تُستخدم بعد</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- الملاحظة -->
+    <div class="footer-note">
+      💡 <strong>ملاحظة:</strong> الدفاتر الفارغة هي تلك المصروفة من مستودع الشحن ولم تُسجّل فيها أي ايصالات شحن حتى الآن. الدفاتر المستخدمة تعرض عدد الصفح الفارغة بناءً على الايصالات المسجلة.
+    </div>
+
+  <script>
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // فلتر ديناميكي: تحديث المواقع حسب صنف الدفتر المختار
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    const bookNameSelect = document.getElementById('bookName');
+    const locationSelect = document.getElementById('location');
+    
+    if (!bookNameSelect || !locationSelect) return;
+    
+    // عند تغيير صنف الدفتر
+    bookNameSelect.addEventListener('change', function() {
+      const selectedBookName = this.value;
+      
+      // إذا اختار "جميع الأصناف"، أعد تحميل المواقع كاملة
+      if (selectedBookName === 'all') {
+        location.reload();
+        return;
+      }
+      
+      // جلب المواقع المتاحة لهذا الصنف من الـ API
+      fetch(`/api/get-locations-by-book-name?book_name=${encodeURIComponent(selectedBookName)}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.locations) {
+            updateLocationDropdown(data.locations, selectedBookName);
+          }
+        })
+        .catch(error => console.error('خطأ في جلب المواقع:', error));
+    });
+  });
+  
+  // ─── تحديث dropdown المواقع بالمواقع المتاحة ─────────────────────
+  function updateLocationDropdown(locations, bookName) {
+    const locationSelect = document.getElementById('location');
+    
+    if (!locationSelect) return;
+    
+    // حفظ الخيار المختار حالياً
+    const currentLocation = locationSelect.value;
+    
+    // حذف جميع الخيارات ما عدا "جميع المواقع"
+    locationSelect.innerHTML = '<option value="all">جميع المواقع</option>';
+    
+    // إضافة المواقع الجديدة
+    locations.forEach(location => {
+      const option = document.createElement('option');
+      option.value = location;
+      option.textContent = location;
+      locationSelect.appendChild(option);
+    });
+    
+    // إذا كان الخيار المختار موجود في القائمة الجديدة، اختره
+    // وإلا اختر "جميع المواقع"
+    if (locations.includes(currentLocation)) {
+      locationSelect.value = currentLocation;
+    } else {
+      locationSelect.value = 'all';
+    }
+    
+    // تغيير لون الـ select للإشارة إلى التحديث
+    locationSelect.style.borderColor = '#2563eb';
+    setTimeout(() => {
+      locationSelect.style.borderColor = '';
+    }, 300);
+  }
+  </script>
+{% endblock %}

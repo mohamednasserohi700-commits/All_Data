@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}الايصالات المكررة{% endblock %}
+{% block page_title %}🔁 الايصالات المكررة{% endblock %}
+{% block page_subtitle %}كشف أي رقم ايصال شحن اتكرر في نفس السنة، سواء في دفتر الشحن العادي أو في ايصالات فروق الأوزان (بطاطس + ذرة){% endblock %}
+
+{% block content %}
+
+<!-- ══ إحصائيات سريعة ══ -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">🔁</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_groups }}</span>
+      <span class="stat-label">رقم ايصال مكرر (إجمالي)</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📋</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ shown_groups }}</span>
+      <span class="stat-label">ظاهر حسب الفلتر الحالي</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🧾</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_duplicate_events }}</span>
+      <span class="stat-label">عدد مرات التسجيل (ظاهر)</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_events_scanned }}</span>
+      <span class="stat-label">إجمالي الأرقام اللي تم فحصها</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⏭️</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_dismissed }}</span>
+      <span class="stat-label">تم تخطيها بعد المراجعة</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ شريط الفلاتر ══ -->
+<div class="table-card" style="margin-bottom:20px;padding:20px 24px;">
+  <form method="get" action="{{ url_for('duplicate_receipts') }}" style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+    <div class="form-group" style="margin:0;min-width:160px;">
+      <label class="form-label">السنة</label>
+      <select name="year" class="form-select">
+        <option value="">كل السنوات</option>
+        {% for y in years_available %}
+        <option value="{{ y }}" {% if f_year == y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;flex:1;min-width:220px;">
+      <label class="form-label">بحث برقم الايصال</label>
+      <input type="text" name="search" class="form-control" placeholder="اكتب رقم الايصال..." value="{{ f_search }}">
+    </div>
+    <button type="submit" class="btn btn-primary">🔍 فلترة</button>
+    {% if f_year or f_search %}
+    <a href="{{ url_for('duplicate_receipts') }}" class="btn btn-secondary">↺ إعادة</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- ══ ملحوظة توضيحية ══ -->
+<div style="background:#fff4ed;border:1.5px solid #fbc99a;border-radius:10px;padding:12px 16px;margin-bottom:20px;">
+  <p style="margin:0;color:#b45309;font-size:0.85rem;line-height:1.8;">
+    ℹ️ الفحص بيغطي <b>كل حاجة اتصرفت</b>: أرقام دفتر إيصال الشحن (بما فيها كل الأرقام داخل أي نطاق من - إلى)،
+    بالإضافة لكل الأرقام المستوردة في ايصالات فروق الأوزان (🥔 بطاطس و🌽 ذرة). أي رقم ايصال ظهر أكتر من مرة
+    <b>في نفس السنة</b>، وكانت التواريخ مختلفة <b>والاذن مختلف</b> مع بعض، هيظهر هنا كتكرار حقيقي.
+    <br>
+    أما لو نفس رقم الايصال اتسجل أكتر من مرة لكن كلها <b>في نفس اليوم</b>، أو كلها <b>بنفس رقم الاذن</b> (لأنه بيكوّت على أكتر من غرفة)، فده وضع طبيعي ومش هيتحسب تكرار.
+  </p>
+</div>
+
+<!-- ══ قائمة الأرقام المكررة ══ -->
+{% if duplicate_groups %}
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+    <button type="button" class="btn btn-danger" onclick="skipAllDuplicateReceipts()">
+      ⏭️ تخطي الكل ({{ duplicate_groups|length }})
+    </button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    {% for g in duplicate_groups %}
+    <div class="table-card" style="padding:18px 22px;" id="dup-card-{{ g.year }}-{{ g.receipt_number }}" data-year="{{ g.year }}" data-receipt="{{ g.receipt_number }}">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:1.05rem;font-weight:800;color:var(--text-primary);">🧾 ايصال رقم {{ g.receipt_number }}</span>
+          <span class="badge badge-purple">📅 سنة {{ g.year }}</span>
+          <span class="badge badge-blue">مكرر {{ g.count }} {{ 'مرات' if g.count > 2 else 'مرتين' }}</span>
+        </div>
+        <button type="button" class="btn btn-secondary" style="white-space:nowrap;"
+                onclick="skipDuplicateReceipt('{{ g.year }}', '{{ g.receipt_number }}')">
+          ⏭️ تخطي الايصال
+        </button>
+      </div>
+
+      {% if g.reason %}
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:14px;">
+        <p style="margin:0;color:#b91c1c;font-size:0.82rem;line-height:1.7;"><b>سبب التكرار:</b> {{ g.reason }}</p>
+      </div>
+      {% endif %}
+
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);font-size:0.82rem;">المصدر</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);font-size:0.82rem;">رقم غرفة المنصرف</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);font-size:0.82rem;">الثلاجة / الدفتر</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);font-size:0.82rem;">التاريخ</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);font-size:0.82rem;">الاذن</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in g.entries %}
+            <tr style="border-bottom:1px solid var(--border,#f0e8dc);">
+              <td style="padding:8px 10px;">
+                {% if it.source_type == 'book' %}
+                  <span style="background:rgba(37,99,235,0.12);color:#1d4ed8;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">📦 دفتر إيصال شحن</span>
+                {% elif it.source_type == 'corn' %}
+                  <span style="background:rgba(217,119,6,0.15);color:#b45309;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">🌽 ذرة</span>
+                {% elif it.source_type == 'qanater' %}
+                  <span style="background:rgba(139,92,246,0.15);color:#7c3aed;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">↩️ استرداد القناطر</span>
+                {% else %}
+                  <span style="background:rgba(180,120,60,0.15);color:#8a5a2b;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">🥔 بطاطس</span>
+                {% endif %}
+              </td>
+              <td style="padding:8px 10px;">📍 {{ it.room }}</td>
+              <td style="padding:8px 10px;">🧊 {{ it.source_label }}</td>
+              <td style="padding:8px 10px;color:var(--text-secondary,#8a7460);font-size:0.85rem;">{{ it.date }}</td>
+              <td style="padding:8px 10px;color:var(--text-secondary,#8a7460);font-size:0.85rem;">{{ it.permit_number or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="table-card">
+    <div class="empty-state">
+      <div class="empty-icon">✅</div>
+      <p>
+        {% if f_year or f_search %}
+          لا يوجد أي أرقام مكررة تطابق الفلتر الحالي
+        {% else %}
+          مفيش أي رقم ايصال مكرر حاليًا — كل الأرقام سليمة 👍
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+<!-- ══ الايصالات اللي تم تخطيها بعد المراجعة ══ -->
+{% if dismissed_groups %}
+  <div style="margin-top:32px;">
+    <h3 style="font-size:1rem;font-weight:800;color:var(--text-primary);margin-bottom:14px;">⏭️ الايصالات المتخطاة ({{ dismissed_groups|length }})</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      {% for g in dismissed_groups %}
+      <div class="table-card" style="padding:14px 22px;opacity:0.85;" id="dismissed-card-{{ g.year }}-{{ g.receipt_number }}">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:0.98rem;font-weight:700;color:var(--text-primary);">🧾 ايصال رقم {{ g.receipt_number }}</span>
+            <span class="badge badge-purple">📅 سنة {{ g.year }}</span>
+            <span style="color:var(--text-secondary,#8a7460);font-size:0.8rem;">تم التخطي بواسطة {{ g.dismissed_by }} — {{ g.dismissed_at }}</span>
+          </div>
+          <button type="button" class="btn btn-secondary" style="white-space:nowrap;"
+                  onclick="restoreDuplicateReceipt('{{ g.year }}', '{{ g.receipt_number }}')">
+            ↺ استرجاع للمكررات
+          </button>
+        </div>
+        {% if g.dismiss_reason %}
+        <p style="margin:8px 0 0;color:var(--text-secondary,#8a7460);font-size:0.82rem;"><b>ملحوظة التخطي:</b> {{ g.dismiss_reason }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function skipDuplicateReceipt(year, receiptNumber) {
+  const reason = prompt(`اكتب سبب تخطي الايصال رقم ${receiptNumber} (اختياري):`, '');
+  if (reason === null) return; // المستخدم عمل إلغاء
+  const fd = new FormData();
+  fd.append('year', year);
+  fd.append('receipt_number', receiptNumber);
+  fd.append('reason', reason);
+  const data = await postForm("{{ url_for('skip_duplicate_receipt') }}", fd);
+  if (data.success) {
+    showToast(data.message);
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+async function skipAllDuplicateReceipts() {
+  const cards = document.querySelectorAll('[id^="dup-card-"]');
+  if (cards.length === 0) {
+    showToast('لا توجد ايصالات لتخطيها', 'error');
+    return;
+  }
+  if (!confirm(`هل تريد تخطي كل الايصالات الظاهرة حاليًا؟ (${cards.length} ايصال)`)) return;
+
+  const reason = prompt('اكتب سبب تخطي الكل (اختياري):', '') || '';
+  const items = Array.from(cards)
+    .map(c => `${c.dataset.year}|${c.dataset.receipt}`)
+    .join(',');
+
+  const fd = new FormData();
+  fd.append('items', items);
+  fd.append('reason', reason);
+  const data = await postForm("{{ url_for('skip_all_duplicate_receipts') }}", fd);
+  if (data.success) {
+    showToast(data.message);
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+async function restoreDuplicateReceipt(year, receiptNumber) {
+  if (!confirm(`هل تريد استرجاع الايصال رقم ${receiptNumber} لقائمة المكررات؟`)) return;
+  const fd = new FormData();
+  fd.append('year', year);
+  fd.append('receipt_number', receiptNumber);
+  const data = await postForm("{{ url_for('restore_duplicate_receipt') }}", fd);
+  if (data.success) {
+    showToast(data.message);
+    setTimeout(() => location.reload(), 600);
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+</script>
+{% endblock %}

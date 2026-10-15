@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}تعديل المستخدم — {{ user.username }}{% endblock %}
+{% block page_title %}تعديل المستخدم{% endblock %}
+{% block page_subtitle %}تعديل بيانات وكلمة مرور المستخدم{% endblock %}
+
+{% block content %}
+
+<!-- Back Button -->
+<div style="margin-bottom: 20px;">
+  <a href="{{ url_for('users') }}" class="btn btn-secondary">
+    ← رجوع إلى GPIT Team
+  </a>
+</div>
+
+<!-- User Card Header -->
+<div style="background: linear-gradient(135deg, rgba(79,156,249,0.12), rgba(155,89,245,0.08)); border: 1px solid rgba(79,156,249,0.25); border-radius: var(--radius-md); padding: 20px 24px; margin-bottom: 28px; display: flex; align-items: center; gap: 16px;">
+  <div style="width: 56px; height: 56px; background: var(--grad-accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 900; box-shadow: 0 0 20px rgba(79,156,249,0.35); flex-shrink: 0;">
+    {{ user.username[0]|upper }}
+  </div>
+  <div>
+    <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">{{ user.username }}</div>
+    <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 3px;">
+      {% if user.gpit %}<code style="color: var(--accent-cyan);">{{ user.gpit }}</code> — {% endif %}
+      {% if user.location %}📍 {{ user.location }}{% else %}بدون موقع{% endif %}
+    </div>
+  </div>
+  <div style="margin-right: auto; text-align: center; padding: 8px 18px; background: rgba(255,255,255,0.04); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+    <div style="font-size: 0.7rem; color: var(--text-muted);">تاريخ الإضافة</div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600;">{{ user.created_at[:10] if user.created_at else '—' }}</div>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+  {% for cat, msg in messages %}
+  <div style="padding: 12px 18px; border-radius: var(--radius-sm); margin-bottom: 18px; background: {% if cat == 'success' %}rgba(0,200,120,0.12); border: 1px solid rgba(0,200,120,0.3); color: var(--accent-green){% else %}rgba(255,90,90,0.12); border: 1px solid rgba(255,90,90,0.3); color: #ff6b6b{% endif %}; font-weight: 600;">
+    {% if cat == 'success' %}✅{% else %}❌{% endif %} {{ msg }}
+  </div>
+  {% endfor %}
+{% endif %}
+{% endwith %}
+
+<!-- Edit Form -->
+<div class="table-card" style="padding: 28px 32px;">
+  <form method="POST" action="/users/edit-page/{{ user.id }}" id="edit-form">
+
+    <h3 style="color: var(--text-primary); font-size: 1rem; font-weight: 700; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+      📝 البيانات الأساسية
+    </h3>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">GPIT</label>
+        <input type="text" class="form-control" name="gpit" value="{{ user.gpit or '' }}" placeholder="رمز GPIT">
+      </div>
+      <div class="form-group">
+        <label class="form-label">اسم المستخدم *</label>
+        <input type="text" class="form-control" name="username" value="{{ user.username }}" required placeholder="الاسم الكامل">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الموقع</label>
+        <input type="text" class="form-control" name="location" value="{{ user.location or '' }}" placeholder="اسم الموقع / المصنع">
+      </div>
+      <div class="form-group">
+        <label class="form-label">الرقم القومي</label>
+        <input type="text" class="form-control" name="national_id" value="{{ user.national_id or '' }}" placeholder="14 رقم">
+      </div>
+      <div class="form-group">
+        <label class="form-label">تاريخ التعيين</label>
+        <input type="date" class="form-control" name="hire_date" value="{{ user.hire_date or '' }}">
+      </div>
+    </div>
+
+    <h3 style="color: var(--text-primary); font-size: 1rem; font-weight: 700; margin: 28px 0 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+      🔐 تغيير كلمة المرور
+    </h3>
+
+    <div style="background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-sm); padding: 20px; margin-bottom: 24px;">
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+        💡 اترك الحقل فارغاً إذا لم تريد تغيير كلمة المرور
+      </p>
+      <div class="form-group" style="max-width: 400px; position: relative;">
+        <label class="form-label">كلمة المرور الجديدة</label>
+        <div style="position: relative;">
+          <input type="password" class="form-control" name="password" id="new-password" placeholder="أدخل كلمة المرور الجديدة" autocomplete="new-password">
+          <button type="button" onclick="togglePass('new-password', this)"
+            style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+        </div>
+      </div>
+      <div class="form-group" style="max-width: 400px; margin-bottom: 0; position: relative;">
+        <label class="form-label">تأكيد كلمة المرور الجديدة</label>
+        <div style="position: relative;">
+          <input type="password" class="form-control" name="password_confirm" id="confirm-password" placeholder="أعد كتابة كلمة المرور" autocomplete="new-password">
+          <button type="button" onclick="togglePass('confirm-password', this)"
+            style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+        </div>
+        <small id="pw-match-msg" style="font-size:0.75rem; margin-top:5px; display:none;"></small>
+      </div>
+    </div>
+
+    <h3 style="color: var(--text-primary); font-size: 1rem; font-weight: 700; margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+      🔒 أسئلة الأمان
+    </h3>
+
+    <div class="form-grid">
+      <div class="form-group full">
+        <label class="form-label">سؤال الأمان 1</label>
+        <input type="text" class="form-control" name="security_q1" value="{{ user.security_q1 or '' }}" placeholder="السؤال الأول للأمان">
+      </div>
+      <div class="form-group">
+        <label class="form-label">رقم الهاتف 📞</label>
+        <input type="text" class="form-control" name="phone" value="{{ user.phone or '' }}" placeholder="01xxxxxxxxx">
+      </div>
+    </div>
+
+    <div style="display:flex; gap:12px; justify-content: flex-start; margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.07);">
+      <button type="submit" class="btn btn-primary" id="save-btn">
+        💾 حفظ التغييرات
+      </button>
+      <a href="{{ url_for('users') }}" class="btn btn-secondary">إلغاء</a>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function togglePass(id, btn) {
+  const inp = document.getElementById(id);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁️' : '🙈';
+}
+
+// Password match validation
+const pw = document.getElementById('new-password');
+const cf = document.getElementById('confirm-password');
+const msg = document.getElementById('pw-match-msg');
+
+function checkMatch() {
+  if (!cf.value) { msg.style.display = 'none'; return; }
+  msg.style.display = 'block';
+  if (pw.value === cf.value) {
+    msg.textContent = '✅ كلمتا المرور متطابقتان';
+    msg.style.color = 'var(--accent-green)';
+  } else {
+    msg.textContent = '❌ كلمتا المرور غير متطابقتين';
+    msg.style.color = '#ff6b6b';
+  }
+}
+
+pw.addEventListener('input', checkMatch);
+cf.addEventListener('input', checkMatch);
+
+document.getElementById('edit-form').addEventListener('submit', function(e) {
+  const p = pw.value, c = cf.value;
+  if (p && p !== c) {
+    e.preventDefault();
+    showToast('كلمتا المرور غير متطابقتين!', 'error');
+    cf.focus();
+  }
+});
+</script>
+{% endblock %}

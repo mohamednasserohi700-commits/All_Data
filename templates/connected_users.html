@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}المتصلون{% endblock %}
+{% block page_title %}👥 المتصلون{% endblock %}
+{% block page_subtitle %}سجل كل من دخل على صفحة استعلام دفتر إيصال شحن — المستخدم، التوقيت، عنوان IP، وعن ماذا بحث{% endblock %}
+
+{% block content %}
+
+<!-- ══ إحصائيات سريعة ══ -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.total }}</span>
+      <span class="stat-label">إجمالي الزيارات</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🌐</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.unique_ips }}</span>
+      <span class="stat-label">عنوان IP مختلف</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🧑‍💻</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.unique_users }}</span>
+      <span class="stat-label">مستخدم مختلف</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_records }}</span>
+      <span class="stat-label">نتيجة الفلتر الحالي</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ شريط البحث + الحذف ══ -->
+<div class="table-card" style="margin-bottom:20px;padding:20px 24px;">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;justify-content:space-between;">
+    <form method="get" action="{{ url_for('connected_users') }}" style="flex:1;min-width:240px;display:flex;gap:10px;">
+      <input type="text" name="search" class="form-control" placeholder="ابحث باسم المستخدم، IP، أو رقم البحث..."
+             value="{{ f_search }}" style="flex:1;">
+      <button type="submit" class="btn btn-primary">🔍 بحث</button>
+      {% if f_search %}
+      <a href="{{ url_for('connected_users') }}" class="btn btn-secondary">↺ إعادة</a>
+      {% endif %}
+    </form>
+    {% if stats.total > 0 %}
+    <button class="btn btn-danger" onclick="deleteAllVisits()">🗑️ حذف كل السجل</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ══ header الجدول ══ -->
+<div class="section-header">
+  <div class="section-title">
+    <h2>📋 سجل الزيارات</h2>
+    <p>
+      عرض {{ records|length }} من {{ total_records }} زيارة
+      {% if f_search %}
+      — <span style="color:var(--accent-orange);">فلتر نشط</span>
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- ══ الجدول ══ -->
+<div class="table-card">
+  <div class="table-responsive">
+    {% if records %}
+    <table id="pv-table">
+      <thead>
+        <tr>
+          <th>م</th>
+          <th>المستخدم</th>
+          <th>عنوان IP</th>
+          <th>بحث عن</th>
+          <th>التوقيت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td><span class="badge badge-blue">{{ loop.index + (page-1) * 50 }}</span></td>
+          <td>
+            {% if r.username == 'زائر (غير مسجل دخول)' %}
+            <span style="color:var(--text-muted);">👤 {{ r.username }}</span>
+            {% else %}
+            <span style="font-weight:700;color:var(--accent-green,#059669);">🧑‍💼 {{ r.username }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <code style="color:var(--accent-cyan);background:rgba(0,200,255,0.1);
+                         padding:3px 10px;border-radius:6px;font-size:0.85rem;">
+              {{ r.ip_address }}
+            </code>
+          </td>
+          <td>
+            {% if r.search_query %}
+            <span style="
+              display:inline-flex;align-items:center;gap:5px;
+              background:rgba(139,92,246,0.15);color:var(--accent-purple);
+              border:1px solid rgba(139,92,246,0.3);border-radius:20px;
+              padding:3px 12px;font-size:0.85rem;font-weight:600;">
+              🔍 {{ r.search_query }}
+            </span>
+            {% else %}
+            <span style="color:var(--text-muted);font-size:0.85rem;">دخول بدون بحث</span>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-purple">🕐 {{ r.visited_at }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if total_pages > 1 %}
+    {% set bp = url_for('connected_users') ~ '?search=' ~ f_search ~ '&page=' %}
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:20px;flex-wrap:wrap;">
+      {% if page > 1 %}
+      <a href="{{ bp }}{{ page-1 }}" class="btn btn-secondary btn-sm">‹ السابق</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">‹ السابق</button>
+      {% endif %}
+
+      {% for p in range(1, total_pages+1) %}
+        {% if p == page %}
+        <span class="btn btn-primary btn-sm" style="min-width:38px;">{{ p }}</span>
+        {% elif p == 1 or p == total_pages or (p >= page-2 and p <= page+2) %}
+        <a href="{{ bp }}{{ p }}" class="btn btn-secondary btn-sm" style="min-width:38px;">{{ p }}</a>
+        {% elif p == page-3 or p == page+3 %}
+        <span style="color:var(--text-muted);padding:0 4px;">…</span>
+        {% endif %}
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="{{ bp }}{{ page+1 }}" class="btn btn-secondary btn-sm">التالي ›</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">التالي ›</button>
+      {% endif %}
+
+      <span style="color:var(--text-muted);font-size:0.85rem;margin-right:8px;">
+        صفحة {{ page }} من {{ total_pages }}
+      </span>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:3rem;margin-bottom:12px;">📭</div>
+      <h3 style="color:var(--text-muted);margin-bottom:8px;">لا توجد زيارات مسجّلة</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem;">
+        {% if f_search %}لا يوجد أي سجلات تطابق البحث{% else %}هيظهر هنا كل من يدخل على صفحة استعلام دفتر إيصال شحن{% endif %}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteAllVisits() {
+  if (!confirm('⚠️ هل أنت متأكد من حذف كل سجل الزيارات بدون استثناء؟\n\nهذا الإجراء لا يمكن التراجع عنه.')) return;
+
+  try {
+    const res = await fetch('{{ url_for("delete_connected_users_all") }}', {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch (e) {
+    showToast('تعذّر الوصول للسيرفر', 'error');
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}معاملات SAP{% endblock %}
+{% block page_title %}معاملات SAP{% endblock %}
+{% block page_subtitle %}إدارة معاملات نظام SAP{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <div class="section-title">
+    <h2>🔄 قائمة معاملات SAP</h2>
+    <p>إجمالي {{ transactions|length }} معاملة مسجلة</p>
+  </div>
+  <button class="btn btn-primary" onclick="openAddSapModal()">
+    ➕ إضافة معاملة
+  </button>
+</div>
+
+<!-- Search -->
+<form method="GET" action="/sap">
+  <div class="filter-bar">
+    <div class="search-bar" style="flex: 1; max-width: 400px;">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="بحث بالاسم أو الرمز أو الحركة..." class="auto-search">
+    </div>
+    {% if search %}
+    <a href="/sap" class="btn btn-secondary btn-sm">✕ إلغاء</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="table-card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم المعاملة (MyIDM)</th>
+          <th>رمز المعاملة</th>
+          <th>الحركة</th>
+          <th>تاريخ الإضافة</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td><span class="badge badge-blue">{{ loop.index }}</span></td>
+          <td style="color: var(--text-primary); font-weight: 600;">{{ t.transaction_name }}</td>
+          <td>
+            <code style="background: rgba(0,212,255,0.1); color: var(--accent-cyan); padding: 3px 8px; border-radius: 6px; font-size: 0.82rem; border: 1px solid rgba(0,212,255,0.2);">
+              {{ t.transaction_code }}
+            </code>
+          </td>
+          <td>
+            {% if t.movement %}
+            <span class="badge badge-orange">{{ t.movement }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="color: var(--text-muted); font-size: 0.82rem;">{{ t.created_at[:10] if t.created_at else '—' }}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn btn-warning btn-sm" onclick="openEditSapModal({{ t.id }})">✏️ تعديل</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSap({{ t.id }}, '{{ t.transaction_name }}')">🗑️ حذف</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <div class="empty-icon">🔄</div>
+              <p>لا توجد معاملات SAP مسجلة بعد</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="sap-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="sap-modal-title">إضافة معاملة SAP جديدة</h3>
+      <button class="modal-close" onclick="closeModal('sap-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="sap-form">
+        <input type="hidden" id="sap-id" name="id">
+        <div class="form-group">
+          <label class="form-label">اسم المعاملة (MyIDM) *</label>
+          <input type="text" class="form-control" id="sap-name" name="transaction_name" required placeholder="اسم المعاملة في MyIDM">
+        </div>
+        <div class="form-group">
+          <label class="form-label">رمز المعاملة *</label>
+          <input type="text" class="form-control" id="sap-code" name="transaction_code" required placeholder="مثال: ME21N">
+        </div>
+        <div class="form-group">
+          <label class="form-label">الحركة</label>
+          <input type="text" class="form-control" id="sap-movement" name="movement" placeholder="نوع الحركة">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('sap-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveSap()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

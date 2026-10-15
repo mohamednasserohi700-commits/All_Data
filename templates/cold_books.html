@@ -1,0 +1,1397 @@
+{% extends "base.html" %}
+{% block title %}أدوات ودفاتر المخازن المبردة{% endblock %}
+{% block page_title %}أدوات ودفاتر المخازن المبردة{% endblock %}
+{% block page_subtitle %}إدارة وتتبع أدوات ودفاتر المخازن المبردة{% endblock %}
+
+{% block content %}
+
+<!-- ══ شريط تنبيهات المخزون ══ -->
+<div id="stock-alert-banner" style="display:none;margin-bottom:18px;"></div>
+
+<div class="section-header">
+  <div class="section-title">
+    <h2>❄️ قائمة الأصناف</h2>
+    <p>إجمالي {{ books|length }} صنف مسجل</p>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button class="btn btn-warning" onclick="openBulkDispenseModal()">⚡ صرف جماعي</button>
+    <button class="btn btn-primary" onclick="openAddBookModal()">➕ إضافة</button>
+  </div>
+</div>
+
+<!-- Sort Controls -->
+<div class="filter-bar">
+  <span style="color:var(--text-muted);font-size:0.85rem;font-weight:600;">ترتيب حسب:</span>
+  {% set sort_options = [('book_name','الاسم'),('last_purchase_date','آخر تاريخ شراء'),('quantity','الكمية'),('created_at','تاريخ الإضافة')] %}
+  {% for val, label in sort_options %}
+  <a href="/cold-books?sort={{ val }}&order={{ 'ASC' if sort == val and order == 'DESC' else 'DESC' }}"
+     class="btn {% if sort == val %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+    {{ label }}{% if sort == val %}{{ '↑' if order == 'ASC' else '↓' }}{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="table-card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم الصنف</th>
+          <th>من</th>
+          <th>إلى</th>
+          <th>آخر تاريخ شراء</th>
+          <th>الكمية الكلية</th>
+          <th>المتبقي</th>
+          <th>الحد الأدنى</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for book in books %}
+        <tr id="book-row-{{ book.id }}">
+          <td><span class="badge badge-blue">{{ loop.index }}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.2rem;">❄️</span>
+              <span style="color:var(--text-primary);font-weight:600;">{{ book.book_name }}</span>
+            </div>
+          </td>
+          <td><code style="color:var(--accent-green);background:rgba(0,229,160,0.08);padding:2px 8px;border-radius:5px;font-size:0.82rem;">{{ book.seq_from or '—' }}</code></td>
+          <td><code style="color:var(--accent-orange);background:rgba(255,140,66,0.08);padding:2px 8px;border-radius:5px;font-size:0.82rem;">{{ book.seq_to or '—' }}</code></td>
+          <td>{% if book.last_purchase_date %}<span class="badge badge-purple">📅 {{ book.last_purchase_date }}</span>{% else %}—{% endif %}</td>
+          <td><span style="font-weight:700;color:var(--accent-cyan);">{{ book.quantity or '—' }}</span></td>
+          <td id="remaining-cell-{{ book.id }}">
+            <span class="remaining-badge" data-book-id="{{ book.id }}" style="font-weight:700;font-size:1rem;color:var(--accent-cyan);">⏳</span>
+          </td>
+          <td><span style="color:var(--accent-orange);font-weight:600;">{{ book.min_quantity or 5 }}</span></td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn btn-success btn-sm"
+                data-book-id="{{ book.id }}"
+                data-book-name="{{ book.book_name|e }}"
+                data-seq-from="{{ book.seq_from or '' }}"
+                data-seq-to="{{ book.seq_to or '' }}"
+                onclick="openDispenseModal(this.dataset.bookId, this.dataset.bookName, this.dataset.seqFrom, this.dataset.seqTo)">📤 صرف</button>
+              <button class="btn btn-info btn-sm"
+                data-book-id="{{ book.id }}"
+                data-book-name="{{ book.book_name|e }}"
+                onclick="openSerialsModal(this.dataset.bookId, this.dataset.bookName)">📋 السجل</button>
+              <button class="btn btn-add-qty btn-sm"
+                data-book-id="{{ book.id }}"
+                data-book-name="{{ book.book_name|e }}"
+                data-book-qty="{{ book.quantity or 0 }}"
+                data-seq-from="{{ book.seq_from or '' }}"
+                data-seq-to="{{ book.seq_to or '' }}"
+                data-pages="{{ book.pages_per_book or '' }}"
+                onclick="openAddQtyModal(this.dataset.bookId, this.dataset.bookName, this.dataset.bookQty, this.dataset.seqFrom, this.dataset.seqTo, this.dataset.pages)">➕ كمية</button>
+              <button class="btn btn-warning btn-sm"
+                data-book-id="{{ book.id }}"
+                onclick="openEditBookModal(this.dataset.bookId)">✏️ تعديل</button>
+              {% if book.seq_from %}
+              <button class="btn btn-info btn-sm"
+                data-book-id="{{ book.id }}"
+                data-book-name="{{ book.book_name|e }}"
+                title="إعادة حساب نطاقات الدفاتر من بداية التسلسل — يصحح أي خطأ قديم في الترقيم"
+                onclick="recalcBookSequence(this.dataset.bookId, this.dataset.bookName)">🔧 تصحيح التسلسل</button>
+              {% endif %}
+              <button class="btn btn-danger btn-sm"
+                data-book-id="{{ book.id }}"
+                data-book-name="{{ book.book_name|e }}"
+                onclick="deleteBook(this.dataset.bookId, this.dataset.bookName)">🗑️ حذف</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">❄️</div><p>لا توجد أصناف مسجلة</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ Modal إضافة/تعديل دفتر ══ -->
+<div class="modal-overlay" id="book-modal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3 id="book-modal-title">إضافة دفتر جديد</h3>
+      <button class="modal-close" onclick="closeModal('book-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="book-form" onsubmit="return false;">
+        <input type="hidden" id="book-id" name="id">
+        <input type="hidden" id="book-add-mode" name="add_mode" value="serial">
+        <input type="hidden" id="book-quantity-ns" name="quantity_ns">
+
+        <!-- اسم الصنف -->
+        <div class="form-group full" style="margin-bottom:14px;">
+          <label class="form-label">اسم الصنف *</label>
+          <input type="text" class="form-control" id="book-name" name="book_name" required placeholder="اسم الصنف">
+        </div>
+
+        <!-- طريقة الإضافة - تبويبات -->
+        <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid rgba(79,156,249,0.25);border-radius:10px;overflow:hidden;">
+          <button type="button" id="tab-serial" onclick="switchAddMode('serial')"
+            style="flex:1;padding:10px;border:none;cursor:pointer;font-size:0.88rem;font-weight:700;transition:all 0.2s;background:rgba(79,156,249,0.18);color:var(--accent-blue);">
+            🔢 إضافة بالتسلسل
+          </button>
+          <button type="button" id="tab-no-serial" onclick="switchAddMode('no_serial')"
+            style="flex:1;padding:10px;border:none;border-right:1px solid rgba(79,156,249,0.2);cursor:pointer;font-size:0.88rem;font-weight:700;transition:all 0.2s;background:transparent;color:var(--text-muted);">
+            📦 روزمة وكمية فقط
+          </button>
+        </div>
+
+        <!-- قسم التسلسل -->
+        <div id="section-serial" class="form-grid">
+          <div class="form-group">
+            <label class="form-label">🔢 التسلسل من *</label>
+            <input type="number" class="form-control" id="book-seq-from" name="seq_from" placeholder="رقم البداية" oninput="calcSeqTo()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📦 عدد الدفاتر (الكمية الكلية) *</label>
+            <input type="number" class="form-control" id="book-quantity" name="quantity" placeholder="مثال: 150" min="0" oninput="calcSeqTo()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📄 سيريالات الدفتر الواحد *
+              <span style="color:var(--text-muted);font-size:0.75rem;display:block;margin-top:2px;">كم سيريال يحتوي الدفتر الواحد؟</span>
+            </label>
+            <input type="number" class="form-control" id="book-pages" name="pages_per_book" placeholder="مثال: 50" min="1" oninput="calcSeqTo()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">🔢 التسلسل إلى <span style="color:var(--text-muted);font-size:0.78rem;">(يُحسب تلقائياً)</span></label>
+            <input type="number" class="form-control" id="book-seq-to" name="seq_to" placeholder="—" readonly
+                   style="background:rgba(79,156,249,0.07);color:var(--accent-cyan);font-weight:700;cursor:not-allowed;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📅 آخر تاريخ طلب شراء</label>
+            <input type="date" class="form-control" id="book-purchase-date" name="last_purchase_date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">⚠️ الحد الأدنى للتنبيه</label>
+            <input type="number" class="form-control" id="book-min-quantity" name="min_quantity" placeholder="5" min="0" value="5">
+          </div>
+          <div class="form-group full" id="seq-summary" style="display:none;background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.22);border-radius:10px;padding:10px 14px;">
+            <span style="color:var(--text-muted);font-size:0.8rem;">📊 نطاق السيريال الكلي: </span>
+            <span id="seq-summary-text" style="color:var(--accent-cyan);font-weight:700;font-size:0.95rem;"></span>
+            <span style="color:var(--text-muted);font-size:0.8rem;margin-right:12px;"> | إجمالي السيريالات: </span>
+            <span id="seq-total-serials" style="color:var(--accent-orange);font-weight:700;font-size:0.95rem;"></span>
+          </div>
+        </div>
+
+        <!-- قسم بدون تسلسل -->
+        <div id="section-no-serial" style="display:none;" class="form-grid">
+          <div class="form-group">
+            <label class="form-label">📦 عدد الروزم *</label>
+            <input type="number" class="form-control" id="book-bundles-ns" placeholder="مثال: 10" min="0"
+              oninput="calcNsTotal()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📒 عدد الدفاتر في الروزمة *</label>
+            <input type="number" class="form-control" id="book-per-bundle-ns" placeholder="مثال: 50" min="1"
+              oninput="calcNsTotal()">
+          </div>
+          <!-- حقل الكمية الفردية -->
+          <div class="form-group full">
+            <label class="form-label">🔢 كمية فردية إضافية <span style="color:var(--text-muted);font-size:0.75rem;">(قطع منفردة خارج الروزم)</span></label>
+            <input type="number" class="form-control" id="book-individual-ns" placeholder="مثال: 2" min="0" value="0"
+              oninput="calcNsTotal()">
+          </div>
+          <!-- نتيجة الضرب -->
+          <div class="form-group full" id="ns-total-box" style="display:none;background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.25);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="color:var(--text-muted);font-size:0.85rem;">📊 إجمالي الكمية:</span>
+            <span id="ns-total-val" style="color:var(--accent-cyan);font-weight:800;font-size:1.2rem;">0</span>
+            <span style="color:var(--text-muted);font-size:0.8rem;">دفتر</span>
+            <span id="ns-total-breakdown" style="color:var(--text-muted);font-size:0.78rem;margin-right:8px;"></span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">📅 آخر تاريخ طلب شراء</label>
+            <input type="date" class="form-control" id="book-purchase-date-ns"
+              oninput="document.getElementById('book-purchase-date').value=this.value">
+          </div>
+          <div class="form-group">
+            <label class="form-label">⚠️ الحد الأدنى للتنبيه</label>
+            <input type="number" class="form-control" id="book-min-quantity-ns" placeholder="5" min="0" value="5"
+              oninput="document.getElementById('book-min-quantity').value=this.value">
+          </div>
+          <div class="form-group full" style="background:rgba(255,160,0,0.06);border:1px solid rgba(255,160,0,0.2);border-radius:10px;padding:10px 14px;">
+            <span style="color:var(--text-muted);font-size:0.82rem;">ℹ️ سيتم إضافة الدفتر بدون تسلسل — الصرف سيكون بالكمية فقط</span>
+          </div>
+        </div>
+
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('book-modal')">إلغاء</button>
+      <button type="button" class="btn btn-primary" onclick="saveBook()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal الصرف ══ -->
+<div class="modal-overlay" id="dispense-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,rgba(0,180,100,0.15),rgba(0,229,160,0.03));border-bottom:1px solid rgba(0,229,160,0.2);">
+      <h3>📤 صرف من الدفتر</h3>
+      <button class="modal-close" onclick="closeModal('dispense-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- معلومات الدفتر -->
+      <div style="background:rgba(79,156,249,0.08);border:1px solid rgba(79,156,249,0.2);border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+        <p style="margin:0;color:var(--text-muted);font-size:0.82rem;">الدفتر المحدد</p>
+        <p id="dispense-book-name" style="margin:4px 0 0;font-weight:700;color:var(--text-primary);font-size:1.05rem;"></p>
+        <p id="dispense-range-label" style="margin:4px 0 0;font-size:0.8rem;color:var(--text-muted);"></p>
+      </div>
+      <!-- إحصائيات سريعة -->
+      <div style="display:flex;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:10px;padding:10px;text-align:center;">
+          <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">الكمية الكلية</p>
+          <p id="disp-total" style="margin:2px 0 0;font-size:1.4rem;font-weight:800;color:var(--accent-cyan);">—</p>
+        </div>
+        <div style="flex:1;background:rgba(255,200,0,0.08);border:1px solid rgba(255,200,0,0.2);border-radius:10px;padding:10px;text-align:center;">
+          <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">المتبقي</p>
+          <p id="disp-remaining" style="margin:2px 0 0;font-size:1.4rem;font-weight:800;color:var(--accent-orange);">—</p>
+        </div>
+        <div style="flex:1;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.2);border-radius:10px;padding:10px;text-align:center;">
+          <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">المصروف</p>
+          <p id="disp-dispensed" style="margin:2px 0 0;font-size:1.4rem;font-weight:800;color:#ff5555;">—</p>
+        </div>
+      </div>
+      <!-- تنبيه الحد الأدنى -->
+      <div id="dispense-warning" style="display:none;background:rgba(255,120,0,0.12);border:1px solid rgba(255,120,0,0.4);border-radius:10px;padding:10px 14px;margin-bottom:14px;text-align:center;">
+        ⚠️ <strong style="color:#ff9900;">تنبيه:</strong> <span id="dispense-warning-msg" style="color:#ffbb44;"></span>
+      </div>
+      <input type="hidden" id="dispense-book-id">
+      <input type="hidden" id="dispense-seq-from">
+      <input type="hidden" id="dispense-seq-to">
+      <input type="hidden" id="dispense-has-serial" value="1">
+
+      <!-- طريقة الصرف - تبويبات -->
+      <div style="display:flex;gap:0;margin-bottom:14px;border:1px solid rgba(0,229,160,0.25);border-radius:10px;overflow:hidden;" id="dispense-mode-tabs">
+        <button type="button" id="dtab-serial" onclick="switchDispenseMode('serial')"
+          style="flex:1;padding:9px 4px;border:none;cursor:pointer;font-size:0.78rem;font-weight:700;transition:all 0.2s;background:rgba(0,229,160,0.15);color:var(--accent-green);">
+          🔢 بالتسلسل
+        </button>
+        <button type="button" id="dtab-qty" onclick="switchDispenseMode('qty')"
+          style="flex:1;padding:9px 4px;border-right:1px solid rgba(0,229,160,0.15);border-left:1px solid rgba(0,229,160,0.15);border-top:none;border-bottom:none;cursor:pointer;font-size:0.78rem;font-weight:700;transition:all 0.2s;background:transparent;color:var(--text-muted);">
+          📦 بالكمية
+        </button>
+        <button type="button" id="dtab-range" onclick="switchDispenseMode('range')"
+          style="flex:1;padding:9px 4px;border:none;cursor:pointer;font-size:0.78rem;font-weight:700;transition:all 0.2s;background:transparent;color:var(--text-muted);">
+          📋 بالروزمة
+        </button>
+      </div>
+
+      <!-- الموقع (مشترك) -->
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label">📍 الموقع المصروف إليه *</label>
+        <input type="text" class="form-control" id="dispense-location"
+               placeholder="أدخل اسم الموقع أو الجهة المصروف إليها" autocomplete="off">
+      </div>
+
+      <!-- قسم بالتسلسل -->
+      <div id="dmode-serial">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">🔢 رقم السيريال *</label>
+          <input type="text" class="form-control" id="dispense-serial"
+                 placeholder="أدخل رقم السيريال ثم اضغط Enter" autocomplete="off"
+                 onkeypress="if(event.key==='Enter') doDispenseAuto()">
+        </div>
+      </div>
+
+      <!-- قسم بالكمية -->
+      <div id="dmode-qty" style="display:none;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">📦 عدد الدفاتر المصروفة *</label>
+          <input type="number" class="form-control" id="dispense-qty"
+                 placeholder="أدخل عدد الدفاتر" min="1" autocomplete="off"
+                 onkeypress="if(event.key==='Enter') doDispenseAuto()">
+          <span id="dqty-avail" style="font-size:0.77rem;color:var(--text-muted);margin-top:4px;display:block;"></span>
+        </div>
+      </div>
+
+      <!-- قسم بالروزمة (نطاق سيريال) -->
+      <div id="dmode-range" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">🔢 السيريال من *</label>
+            <input type="number" class="form-control" id="dispense-range-from" placeholder="رقم البداية" min="0" oninput="updateDispenseRangeCount()">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">🔢 السيريال إلى *</label>
+            <input type="number" class="form-control" id="dispense-range-to" placeholder="رقم النهاية" min="0" oninput="updateDispenseRangeCount()">
+          </div>
+        </div>
+        <div id="drange-count" style="display:none;margin-top:10px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:9px;padding:8px 14px;font-size:0.85rem;text-align:center;">
+          سيتم صرف <strong id="drange-count-num" style="color:var(--accent-cyan);font-size:1.1rem;"></strong> سيريال
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('dispense-modal')">إغلاق</button>
+      <button class="btn btn-success" id="dispense-submit-btn" onclick="doDispenseAuto()">📤 تأكيد الصرف</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal سجل الصرف ══ -->
+<div class="modal-overlay" id="serials-modal">
+  <div class="modal" style="max-width:660px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,rgba(79,156,249,0.15),rgba(79,156,249,0.03));border-bottom:1px solid rgba(79,156,249,0.2);">
+      <h3 id="serials-modal-title">📋 سجل الصرف</h3>
+      <button class="modal-close" onclick="closeModal('serials-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- إحصائيات -->
+      <div id="serials-stats" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <p style="color:var(--text-muted);">جار التحميل...</p>
+      </div>
+      <!-- تنبيه -->
+      <div id="serials-warning" style="display:none;background:rgba(255,120,0,0.12);border:1px solid rgba(255,120,0,0.4);border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center;"></div>
+      <!-- قائمة السريالات -->
+      <div id="serials-list" style="max-height:380px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('serials-modal')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal الصرف الجماعي ══ -->
+<div class="modal-overlay" id="bulk-dispense-modal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,rgba(255,160,0,0.15),rgba(255,100,0,0.04));border-bottom:1px solid rgba(255,160,0,0.25);">
+      <h3>⚡ صرف جماعي بالنطاق</h3>
+      <button class="modal-close" onclick="closeModal('bulk-dispense-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- اختيار الدفتر -->
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">📚 اختر الدفتر *</label>
+        <select class="form-control" id="bulk-book-select" onchange="onBulkBookChange()">
+          <option value="">— اختر دفتراً —</option>
+          {% for book in books %}
+          <option value="{{ book.id }}" data-from="{{ book.seq_from or '' }}" data-to="{{ book.seq_to or '' }}" data-name="{{ book.book_name }}">
+            {{ book.book_name }}{% if book.seq_from and book.seq_to %} ({{ book.seq_from }} → {{ book.seq_to }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- معلومات الدفتر المختار -->
+      <div id="bulk-book-info" style="display:none;background:rgba(79,156,249,0.08);border:1px solid rgba(79,156,249,0.2);border-radius:10px;padding:11px 14px;margin-bottom:14px;">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <div><span style="color:var(--text-muted);font-size:0.75rem;">نطاق الدفتر</span><br><span id="bulk-book-range" style="color:var(--accent-cyan);font-weight:700;"></span></div>
+          <div><span style="color:var(--text-muted);font-size:0.75rem;">المتبقي</span><br><span id="bulk-book-remaining" style="color:var(--accent-orange);font-weight:700;">⏳</span></div>
+          <div><span style="color:var(--text-muted);font-size:0.75rem;">الحد الأدنى</span><br><span id="bulk-book-minqty" style="color:#ff9900;font-weight:700;">—</span></div>
+        </div>
+      </div>
+
+      <!-- تنبيه حد أدنى -->
+      <div id="bulk-warning" style="display:none;background:rgba(255,120,0,0.12);border:1px solid rgba(255,120,0,0.4);border-radius:10px;padding:9px 14px;margin-bottom:14px;text-align:center;font-size:0.85rem;">
+        ⚠️ <strong style="color:#ff9900;">تنبيه:</strong> <span id="bulk-warning-msg" style="color:#ffbb44;"></span>
+      </div>
+
+      <!-- نطاق السيريال -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">🔢 السيريال من *</label>
+          <input type="number" class="form-control" id="bulk-serial-from" placeholder="30000" min="0" oninput="updateBulkCount()">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">🔢 السيريال إلى *</label>
+          <input type="number" class="form-control" id="bulk-serial-to" placeholder="35000" min="0" oninput="updateBulkCount()">
+        </div>
+      </div>
+
+      <!-- عداد الكمية -->
+      <div id="bulk-count-info" style="display:none;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:9px;padding:9px 14px;margin-bottom:14px;text-align:center;">
+        سيتم صرف <strong id="bulk-count-num" style="color:var(--accent-cyan);font-size:1.15rem;"></strong> سيريال
+      </div>
+
+      <!-- الموقع -->
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">📍 الموقع المصروف إليه *</label>
+        <input type="text" class="form-control" id="bulk-location" placeholder="أدخل اسم الموقع أو الجهة" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bulk-dispense-modal')">إلغاء</button>
+      <button class="btn btn-warning" onclick="doBulkDispense()" id="bulk-submit-btn">⚡ تأكيد الصرف الجماعي</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal إضافة كمية ══ -->
+<div class="modal-overlay" id="add-qty-modal">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,rgba(0,229,160,0.13),rgba(79,156,249,0.05));border-bottom:1px solid rgba(0,229,160,0.22);">
+      <h3>➕ إضافة كمية للصنف</h3>
+      <button class="modal-close" onclick="closeModal('add-qty-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- معلومات الصنف -->
+      <div style="background:rgba(79,156,249,0.08);border:1px solid rgba(79,156,249,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+        <p style="margin:0;color:var(--text-muted);font-size:0.78rem;">الصنف المحدد</p>
+        <p id="add-qty-book-name" style="margin:4px 0 0;font-weight:700;color:var(--text-primary);font-size:1.05rem;"></p>
+        <div style="display:flex;gap:16px;margin-top:8px;">
+          <div>
+            <span style="color:var(--text-muted);font-size:0.72rem;">الكمية الحالية</span><br>
+            <span id="add-qty-current" style="color:var(--accent-cyan);font-weight:800;font-size:1.3rem;">—</span>
+          </div>
+          <div style="color:var(--text-muted);font-size:1.5rem;align-self:flex-end;padding-bottom:2px;">+</div>
+          <div>
+            <span style="color:var(--text-muted);font-size:0.72rem;">الكمية المضافة</span><br>
+            <span id="add-qty-preview" style="color:var(--accent-green);font-weight:800;font-size:1.3rem;">0</span>
+          </div>
+          <div style="color:var(--text-muted);font-size:1.5rem;align-self:flex-end;padding-bottom:2px;">=</div>
+          <div>
+            <span style="color:var(--text-muted);font-size:0.72rem;">الإجمالي الجديد</span><br>
+            <span id="add-qty-total-preview" style="color:var(--accent-orange);font-weight:800;font-size:1.3rem;">—</span>
+          </div>
+        </div>
+      </div>
+      <input type="hidden" id="add-qty-book-id">
+      <input type="hidden" id="add-qty-has-serial">
+      <input type="hidden" id="add-qty-old-seq-to">
+      <input type="hidden" id="add-qty-pages">
+
+      <!-- حقل الكمية المضافة -->
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">📦 الكمية المضافة *</label>
+        <input type="number" class="form-control" id="add-qty-value" placeholder="أدخل الكمية المراد إضافتها" min="1"
+               oninput="updateQtyPreview()" style="font-size:1.15rem;font-weight:700;text-align:center;">
+        <small style="color:var(--text-muted);font-size:0.75rem;margin-top:4px;display:block;">ℹ️ سيتم جمع هذه الكمية مع الكمية الحالية للصنف</small>
+      </div>
+
+      <!-- حقول التسلسل — تظهر فقط للأصناف ذات التسلسل -->
+      <div id="add-qty-serial-section" style="display:none;background:rgba(79,156,249,0.07);border:1px solid rgba(79,156,249,0.22);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+        <p style="margin:0 0 10px;color:var(--accent-blue);font-size:0.85rem;font-weight:700;">🔢 التسلسل الجديد (محسوب تلقائياً)</p>
+        <div class="form-grid" style="gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:0.8rem;">يبدأ من</label>
+            <input type="number" class="form-control" id="add-qty-new-seq-from" readonly
+                   style="background:rgba(79,156,249,0.07);color:var(--accent-cyan);font-weight:700;cursor:not-allowed;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label" style="font-size:0.8rem;">ينتهي عند</label>
+            <input type="number" class="form-control" id="add-qty-new-seq-to" readonly
+                   style="background:rgba(79,156,249,0.07);color:var(--accent-orange);font-weight:700;cursor:not-allowed;">
+          </div>
+        </div>
+        <small style="color:var(--text-muted);font-size:0.75rem;margin-top:6px;display:block;">⚡ يُكمل من بعد آخر تسلسل موجود</small>
+      </div>
+
+      <!-- تاريخ الشراء (اختياري) -->
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">📅 تاريخ طلب الشراء <span style="color:var(--text-muted);font-size:0.75rem;">(اختياري — سيُحدَّث إن أُدخل)</span></label>
+        <input type="date" class="form-control" id="add-qty-date">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('add-qty-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="doAddQuantity()" id="add-qty-submit-btn"
+              style="background:linear-gradient(135deg,#00a855,#00e5a0);">
+        ✅ تأكيد الإضافة
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Styles ══ -->
+<style>
+/* شريط التنبيهات */
+.stock-alert-bar{background:linear-gradient(135deg,rgba(255,100,0,0.12),rgba(255,60,0,0.06));border:1px solid rgba(255,120,0,0.4);border-radius:14px;padding:14px 18px;animation:alertPulse 2.5s ease-in-out infinite;}
+@keyframes alertPulse{0%,100%{border-color:rgba(255,120,0,0.4);}50%{border-color:rgba(255,160,0,0.8);box-shadow:0 0 18px rgba(255,130,0,0.2);}}
+.alert-bar-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.alert-bar-icon{font-size:1.3rem;animation:bellShake 1.5s ease-in-out infinite;}
+@keyframes bellShake{0%,100%{transform:rotate(0);}10%,30%{transform:rotate(-12deg);}20%,40%{transform:rotate(12deg);}50%{transform:rotate(0);}}
+.alert-bar-title{font-weight:700;color:#ffaa44;font-size:0.95rem;flex:1;}
+.alert-bar-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:2px 6px;border-radius:5px;transition:color 0.2s;}
+.alert-bar-close:hover{color:#ff5555;}
+.alert-bar-items{display:flex;flex-wrap:wrap;gap:8px;}
+.alert-bar-item{display:flex;align-items:center;gap:8px;background:rgba(255,100,0,0.1);border:1px solid rgba(255,120,0,0.25);border-radius:9px;padding:7px 12px;font-size:0.82rem;}
+.alert-item-icon{font-size:1rem;}
+.alert-item-name{font-weight:700;color:var(--text-primary);}
+.alert-item-qty,.alert-item-min{color:var(--text-muted);}
+.alert-item-badge{background:rgba(255,80,0,0.15);border:1px solid rgba(255,100,0,0.3);color:#ffaa44;padding:2px 8px;border-radius:5px;font-size:0.75rem;font-weight:600;}
+.btn-warning{background:linear-gradient(135deg,#b86000,#ff9900);color:#fff;border:none;}
+.btn-warning:hover{background:linear-gradient(135deg,#d07000,#ffaa22);}
+/* أزرار */
+.btn-success{background:linear-gradient(135deg,#00a855,#00e5a0);color:#fff;border:none;}
+.btn-success:hover{background:linear-gradient(135deg,#00c466,#00ffa8);}
+.btn-info{background:linear-gradient(135deg,#1a6fbf,#4f9cf9);color:#fff;border:none;}
+.btn-info:hover{background:linear-gradient(135deg,#2280d0,#60aeff);}
+.serial-row{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-radius:9px;margin-bottom:6px;background:rgba(79,156,249,0.06);border:1px solid rgba(79,156,249,0.12);transition:background 0.2s;}
+.serial-row:hover{background:rgba(79,156,249,0.11);}
+.serial-row code{color:var(--accent-cyan);font-size:0.92rem;font-weight:700;letter-spacing:0.5px;}
+.serial-row small{color:var(--text-muted);font-size:0.75rem;}
+.btn-del-serial{background:rgba(255,80,80,0.12);border:1px solid rgba(255,80,80,0.3);color:#ff5555;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:0.78rem;transition:all 0.2s;}
+.btn-del-serial:hover{background:rgba(255,80,80,0.25);}
+.btn-edit-serial{background:rgba(79,156,249,0.12);border:1px solid rgba(79,156,249,0.3);color:#7ab8ff;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:0.78rem;transition:all 0.2s;}
+.btn-edit-serial:hover{background:rgba(79,156,249,0.25);}
+.btn-add-qty{background:linear-gradient(135deg,#006e3a,#00c46e);color:#fff;border:none;}
+.btn-add-qty:hover{background:linear-gradient(135deg,#008a4a,#00e07e);transform:translateY(-1px);}
+</style>
+
+<!-- ══ Scripts ══ -->
+<script>
+// ── تحميل المتبقي لكل الصفوف عند فتح الصفحة
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.remaining-badge').forEach(async el => {
+    const id = el.dataset.bookId;
+    try {
+      const r = await fetch(`/cold-books/serials/${id}`);
+      const d = await r.json();
+      el.textContent = d.remaining;
+      if (d.warning) {
+        el.style.color = '#ff9900';
+        el.style.textShadow = '0 0 8px rgba(255,150,0,0.4)';
+        el.title = `⚠️ أقل من الحد الأدنى (${d.min_quantity})`;
+        const row = document.getElementById(`book-row-${id}`);
+        if (row) row.style.background = 'rgba(255,120,0,0.04)';
+      }
+    } catch(e){ el.textContent = '—'; }
+  });
+  loadStockAlerts();
+});
+
+// ── شريط تنبيهات المخزون
+async function loadStockAlerts() {
+  try {
+    const r = await fetch('/cold-books/low-stock-alerts');
+    const d = await r.json();
+    const banner = document.getElementById('stock-alert-banner');
+    if (!d.alerts || d.alerts.length === 0) {
+      banner.style.display = 'none';
+      return;
+    }
+    banner.style.display = 'block';
+    banner.innerHTML = `
+      <div class="stock-alert-bar">
+        <div class="alert-bar-header">
+          <span class="alert-bar-icon">🔔</span>
+          <span class="alert-bar-title">تنبيهات المخزون — ${d.alerts.length} دفتر وصل للحد الأدنى</span>
+          <button class="alert-bar-close" onclick="document.getElementById('stock-alert-banner').style.display='none'">✕</button>
+        </div>
+        <div class="alert-bar-items">
+          ${d.alerts.map(a => `
+            <div class="alert-bar-item">
+              <span class="alert-item-icon">❄️</span>
+              <span class="alert-item-name">${a.book_name}</span>
+              <span class="alert-item-qty">المتبقي: <strong style="color:#ff5555;">${a.remaining}</strong></span>
+              <span class="alert-item-min">الحد الأدنى: <strong style="color:#ff9900;">${a.min_quantity}</strong></span>
+              <span class="alert-item-badge">⚠️ يُنصح بطلب توريد</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════
+// ── وظائف modal الإضافة / التعديل
+// ══════════════════════════════════════════════════
+
+let _currentAddMode = 'serial';
+
+function switchAddMode(mode) {
+  _currentAddMode = mode;
+  document.getElementById('book-add-mode').value = mode;
+  if (mode === 'serial') {
+    document.getElementById('section-serial').style.display = '';
+    document.getElementById('section-no-serial').style.display = 'none';
+    document.getElementById('tab-serial').style.background    = 'rgba(79,156,249,0.18)';
+    document.getElementById('tab-serial').style.color         = 'var(--accent-blue)';
+    document.getElementById('tab-no-serial').style.background = 'transparent';
+    document.getElementById('tab-no-serial').style.color      = 'var(--text-muted)';
+  } else {
+    document.getElementById('section-serial').style.display   = 'none';
+    document.getElementById('section-no-serial').style.display = '';
+    document.getElementById('tab-serial').style.background    = 'transparent';
+    document.getElementById('tab-serial').style.color         = 'var(--text-muted)';
+    document.getElementById('tab-no-serial').style.background = 'rgba(255,160,0,0.15)';
+    document.getElementById('tab-no-serial').style.color      = '#ffaa44';
+    // مزامنة الحد الأدنى
+    document.getElementById('book-min-quantity-ns').value = document.getElementById('book-min-quantity').value || 5;
+  }
+}
+
+function openAddBookModal() {
+  document.getElementById('book-modal-title').textContent = 'إضافة دفتر جديد';
+  document.getElementById('book-id').value        = '';
+  document.getElementById('book-name').value      = '';
+  document.getElementById('book-seq-from').value  = '';
+  document.getElementById('book-quantity').value  = '';
+  document.getElementById('book-pages').value     = '';
+  document.getElementById('book-seq-to').value    = '';
+  document.getElementById('book-purchase-date').value = '';
+  document.getElementById('book-min-quantity').value  = 5;
+  document.getElementById('book-quantity-ns').value   = '';
+  document.getElementById('book-bundles-ns').value    = '';
+  document.getElementById('book-per-bundle-ns').value = '';
+  document.getElementById('book-individual-ns').value = '0';
+  document.getElementById('book-purchase-date-ns').value = '';
+  document.getElementById('book-min-quantity-ns').value  = 5;
+  document.getElementById('seq-summary').style.display  = 'none';
+  switchAddMode('serial');
+  openModal('book-modal');
+  setTimeout(() => document.getElementById('book-name').focus(), 300);
+}
+
+async function openEditBookModal(bid) {
+  document.getElementById('book-modal-title').textContent = 'تعديل الدفتر';
+  try {
+    const r = await fetch(`/cold-books/edit/${bid}`);
+    const b = await r.json();
+    console.log('[DEBUG openEditBookModal] raw book data from server:', b);
+    document.getElementById('book-id').value       = bid;
+    document.getElementById('book-name').value     = b.book_name || '';
+    document.getElementById('book-purchase-date').value = b.last_purchase_date || '';
+    document.getElementById('book-min-quantity').value  = b.min_quantity || 5;
+    if (b.seq_from !== null && b.seq_from !== undefined) {
+      // دفتر بتسلسل
+      document.getElementById('book-seq-from').value = b.seq_from || '';
+      document.getElementById('book-quantity').value = b.quantity || '';
+      document.getElementById('book-pages').value    = b.pages_per_book || '';
+      document.getElementById('book-seq-to').value  = b.seq_to || '';
+      console.log('[DEBUG openEditBookModal] fields set to: seq_from=', b.seq_from, 'quantity=', b.quantity, 'pages_per_book=', b.pages_per_book, 'seq_to(before calcSeqTo)=', b.seq_to);
+      switchAddMode('serial');
+      calcSeqTo();
+      console.log('[DEBUG openEditBookModal] seq_to field AFTER calcSeqTo():', document.getElementById('book-seq-to').value);
+    } else {
+      // دفتر بدون تسلسل
+      document.getElementById('book-quantity').value      = b.quantity || '';
+      document.getElementById('book-quantity-ns').value   = b.quantity || '';
+      document.getElementById('book-purchase-date-ns').value = b.last_purchase_date || '';
+      document.getElementById('book-min-quantity-ns').value  = b.min_quantity || 5;
+      switchAddMode('no_serial');
+    }
+    openModal('book-modal');
+  } catch(e) {
+    showToast('تعذر تحميل بيانات الدفتر', 'error');
+  }
+}
+
+function calcNsTotal() {
+  const bundles    = parseInt(document.getElementById('book-bundles-ns').value) || 0;
+  const perBundle  = parseInt(document.getElementById('book-per-bundle-ns').value) || 0;
+  const individual = parseInt(document.getElementById('book-individual-ns').value) || 0;
+  const box = document.getElementById('ns-total-box');
+  const bundlesTotal = bundles * perBundle;
+  const total = bundlesTotal + individual;
+  if (total > 0) {
+    document.getElementById('ns-total-val').textContent = total.toLocaleString('ar-EG');
+    // تفاصيل الحساب
+    let breakdown = '';
+    if (bundles > 0 && perBundle > 0 && individual > 0) {
+      breakdown = `(${bundles} روزمة × ${perBundle} = ${bundlesTotal}) + ${individual} فردي`;
+    } else if (bundles > 0 && perBundle > 0) {
+      breakdown = `${bundles} روزمة × ${perBundle} دفتر`;
+    } else if (individual > 0) {
+      breakdown = `${individual} دفتر فردي`;
+    }
+    document.getElementById('ns-total-breakdown').textContent = breakdown;
+    box.style.display = 'flex';
+    document.getElementById('book-quantity').value    = total;
+    document.getElementById('book-quantity-ns').value = total;
+  } else {
+    box.style.display = 'none';
+    document.getElementById('book-quantity').value    = '';
+    document.getElementById('book-quantity-ns').value = '';
+  }
+}
+
+function calcSeqTo() {
+  const from  = parseInt(document.getElementById('book-seq-from').value);
+  const qty   = parseInt(document.getElementById('book-quantity').value);
+  const pages = parseInt(document.getElementById('book-pages').value);
+  console.log('[DEBUG calcSeqTo] from=', from, 'qty=', qty, 'pages=', pages, 'raw seq-from=', document.getElementById('book-seq-from').value, 'raw quantity=', document.getElementById('book-quantity').value, 'raw pages=', document.getElementById('book-pages').value);
+  if (!isNaN(from) && !isNaN(qty) && !isNaN(pages) && pages > 0 && qty > 0) {
+    const seqTo = from + qty * pages - 1;
+    console.log('[DEBUG calcSeqTo] computed seqTo=', seqTo, '=', from, '+', qty, '*', pages, '- 1');
+    document.getElementById('book-seq-to').value = seqTo;
+    document.getElementById('seq-summary').style.display = 'block';
+    document.getElementById('seq-summary-text').textContent = `${from} → ${seqTo}`;
+    document.getElementById('seq-total-serials').textContent = (qty * pages).toLocaleString('ar-EG');
+  } else {
+    document.getElementById('book-seq-to').value = '';
+    document.getElementById('seq-summary').style.display = 'none';
+  }
+}
+
+async function saveBook() {
+  const mode = document.getElementById('book-add-mode').value;
+  const name = document.getElementById('book-name').value.trim();
+  if (!name) { showToast('يجب إدخال اسم الدفتر', 'error'); document.getElementById('book-name').focus(); return; }
+
+  const fd = new FormData();
+  fd.append('add_mode', mode);
+  fd.append('book_name', name);
+
+  if (mode === 'no_serial') {
+    fd.append('last_purchase_date', document.getElementById('book-purchase-date-ns').value);
+    fd.append('min_quantity', document.getElementById('book-min-quantity-ns').value || 5);
+    const qty = document.getElementById('book-quantity-ns').value.trim();
+    if (!qty || parseInt(qty) < 1) { showToast('يجب إدخال الكمية (روزمة أو فردي)', 'error'); document.getElementById('book-bundles-ns').focus(); return; }
+    fd.append('quantity', qty);
+  } else {
+    fd.append('last_purchase_date', document.getElementById('book-purchase-date').value);
+    fd.append('min_quantity', document.getElementById('book-min-quantity').value || 5);
+    const seqFrom = document.getElementById('book-seq-from').value.trim();
+    const qty     = document.getElementById('book-quantity').value.trim();
+    const pages   = document.getElementById('book-pages').value.trim();
+    const seqToFieldValue = document.getElementById('book-seq-to').value;
+    console.log('[DEBUG saveBook] about to submit: seqFrom=', seqFrom, 'qty=', qty, 'pages=', pages, 'seq-to field value=', seqToFieldValue);
+    if (!seqFrom) { showToast('يجب إدخال التسلسل من', 'error'); document.getElementById('book-seq-from').focus(); return; }
+    if (!qty)     { showToast('يجب إدخال الكمية', 'error'); document.getElementById('book-quantity').focus(); return; }
+    if (!pages)   { showToast('يجب إدخال عدد سيريالات الدفتر الواحد', 'error'); document.getElementById('book-pages').focus(); return; }
+    fd.append('seq_from', seqFrom);
+    fd.append('seq_to',   seqToFieldValue);
+    fd.append('quantity', qty);
+    fd.append('pages_per_book', pages);
+  }
+
+  const bid = document.getElementById('book-id').value;
+  const url = bid ? `/cold-books/edit/${bid}` : '/cold-books/add';
+  const data = await postForm(url, fd);
+  if (data.success) {
+    showToast(data.message, 'success');
+    closeModal('book-modal');
+    setTimeout(() => location.reload(), 900);
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+async function deleteBook(bid, name) {
+  if (!confirm(`هل تريد حذف الدفتر "${name}"؟ سيتم حذف جميع سجلات الصرف المرتبطة به.`)) return;
+  const fd   = new FormData();
+  const data = await postForm(`/cold-books/delete/${bid}`, fd);
+  if (data.success) {
+    showToast(data.message, 'success');
+    const row = document.getElementById(`book-row-${bid}`);
+    if (row) row.remove();
+    loadStockAlerts();
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+// ── إعادة حساب وتصحيح تسلسل دفتر (يصحح أي خطأ قديم في ترقيم الدفاتر) ───────
+async function recalcBookSequence(bid, name) {
+  if (!confirm(`سيتم إعادة حساب نطاقات الدفاتر لـ "${name}" بالاعتماد على بداية التسلسل وعدد الدفاتر المسجلة، وتصحيح أي سجلات صرف سابقة بها أخطاء. هل تريد المتابعة؟`)) return;
+  const fd   = new FormData();
+  const data = await postForm(`/cold-books/recalc/${bid}`, fd);
+  if (data.success) {
+    showToast(data.message, 'success');
+    loadStockAlerts();
+    // إذا كان سجل الصرف مفتوحاً لهذا الدفتر، نعيد تحميله بالقيم المصححة
+    if (_currentSerialsBookId == bid) {
+      await loadSerialsData(bid);
+    }
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════
+// ── وظائف modal الصرف (3 أوضاع)
+// ══════════════════════════════════════════════════
+
+let _dispenseMode = 'serial';
+let _dispenseRemaining = null;
+
+function switchDispenseMode(mode) {
+  _dispenseMode = mode;
+  ['serial','qty','range'].forEach(m => {
+    const el = document.getElementById(`dmode-${m}`);
+    const tab = document.getElementById(`dtab-${m}`);
+    if (el)  el.style.display  = (m === mode) ? '' : 'none';
+    if (tab) {
+      if (m === mode) {
+        tab.style.background = 'rgba(0,229,160,0.15)';
+        tab.style.color      = 'var(--accent-green)';
+      } else {
+        tab.style.background = 'transparent';
+        tab.style.color      = 'var(--text-muted)';
+      }
+    }
+  });
+  // إذا الدفتر بدون تسلسل → أخفِ تبويب التسلسل والروزمة
+  const hasSerial = document.getElementById('dispense-has-serial').value === '1';
+  if (!hasSerial) {
+    document.getElementById('dtab-serial').style.opacity = '0.35';
+    document.getElementById('dtab-range').style.opacity  = '0.35';
+    document.getElementById('dtab-serial').style.pointerEvents = 'none';
+    document.getElementById('dtab-range').style.pointerEvents  = 'none';
+    // إجبار وضع الكمية
+    if (mode !== 'qty') switchDispenseMode('qty');
+  }
+  // تحديث نص الزر
+  const labels = {serial:'📤 صرف بالتسلسل', qty:'📦 صرف بالكمية', range:'📋 صرف بالروزمة'};
+  document.getElementById('dispense-submit-btn').textContent = labels[_dispenseMode] || '📤 تأكيد الصرف';
+}
+
+function updateDispenseRangeCount() {
+  const from = parseInt(document.getElementById('dispense-range-from').value);
+  const to   = parseInt(document.getElementById('dispense-range-to').value);
+  const info = document.getElementById('drange-count');
+  if (!isNaN(from) && !isNaN(to) && to >= from) {
+    const count = to - from + 1;
+    document.getElementById('drange-count-num').textContent = count.toLocaleString('ar-EG');
+    info.style.display = 'block';
+    const over = (_dispenseRemaining !== null && count > _dispenseRemaining);
+    info.style.background   = over ? 'rgba(255,50,50,0.1)'  : 'rgba(0,229,160,0.08)';
+    info.style.borderColor  = over ? 'rgba(255,80,80,0.4)'  : 'rgba(0,229,160,0.2)';
+    document.getElementById('drange-count-num').style.color = over ? '#ff5555' : 'var(--accent-cyan)';
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+async function openDispenseModal(bookId, bookName, seqFrom, seqTo) {
+  const hasSerial = !!(seqFrom && seqTo);
+  document.getElementById('dispense-book-id').value   = bookId;
+  document.getElementById('dispense-seq-from').value  = seqFrom;
+  document.getElementById('dispense-seq-to').value    = seqTo;
+  document.getElementById('dispense-has-serial').value = hasSerial ? '1' : '0';
+  document.getElementById('dispense-book-name').textContent = bookName;
+  document.getElementById('dispense-range-label').textContent = hasSerial
+    ? `النطاق المسموح: ${seqFrom} ← ${seqTo}` : 'لا يوجد تسلسل — الصرف بالكمية فقط';
+  // إعادة تهيئة الحقول
+  document.getElementById('dispense-serial').value      = '';
+  document.getElementById('dispense-location').value   = '';
+  document.getElementById('dispense-qty').value        = '';
+  document.getElementById('dispense-range-from').value = seqFrom || '';
+  document.getElementById('dispense-range-to').value   = '';
+  document.getElementById('drange-count').style.display = 'none';
+  document.getElementById('dispense-warning').style.display = 'none';
+  document.getElementById('disp-total').textContent    = '⏳';
+  document.getElementById('disp-remaining').textContent = '⏳';
+  document.getElementById('disp-dispensed').textContent = '⏳';
+  _dispenseRemaining = null;
+  // إعادة تهيئة التبويبات
+  ['serial','qty','range'].forEach(m => {
+    const tab = document.getElementById(`dtab-${m}`);
+    if (tab) { tab.style.opacity = '1'; tab.style.pointerEvents = ''; }
+  });
+  // افتراضي: تسلسل إن وجد، وإلا كمية
+  switchDispenseMode(hasSerial ? 'serial' : 'qty');
+  openModal('dispense-modal');
+  try {
+    const r = await fetch(`/cold-books/serials/${bookId}`);
+    const d = await r.json();
+    document.getElementById('disp-total').textContent    = d.total;
+    document.getElementById('disp-remaining').textContent = d.remaining;
+    document.getElementById('disp-dispensed').textContent = d.dispensed;
+    _dispenseRemaining = d.remaining;
+    document.getElementById('dqty-avail').textContent = `المتاح: ${d.remaining} دفتر`;
+    if (d.warning) showDispenseWarning(d.remaining, d.min_quantity);
+  } catch(e){}
+  setTimeout(() => {
+    const focusEl = document.getElementById(_dispenseMode === 'serial' ? 'dispense-serial' : (_dispenseMode === 'qty' ? 'dispense-qty' : 'dispense-location'));
+    if (focusEl) focusEl.focus();
+  }, 300);
+}
+
+function showDispenseWarning(remaining, minQty) {
+  document.getElementById('dispense-warning').style.display = 'block';
+  document.getElementById('dispense-warning-msg').textContent =
+    `الكمية المتبقية (${remaining}) وصلت للحد الأدنى (${minQty}) — يُنصح بطلب توريد جديد`;
+}
+
+// ── موزع الصرف حسب الوضع
+async function doDispenseAuto() {
+  if (_dispenseMode === 'serial') return doDispense();
+  if (_dispenseMode === 'qty')    return doDispenseQty();
+  if (_dispenseMode === 'range')  return doDispenseRange();
+}
+
+// ── الصرف بالتسلسل
+async function doDispense() {
+  const bookId   = document.getElementById('dispense-book-id').value;
+  const serial   = document.getElementById('dispense-serial').value.trim();
+  const location = document.getElementById('dispense-location').value.trim();
+  if (!location) { showToast('يجب إدخال الموقع المصروف إليه', 'error'); document.getElementById('dispense-location').focus(); return; }
+  if (!serial)   { showToast('يجب إدخال رقم السيريال', 'error'); document.getElementById('dispense-serial').focus(); return; }
+
+  const btn = document.getElementById('dispense-submit-btn');
+  btn.disabled = true; btn.textContent = '⏳ جار الصرف...';
+  try {
+    const fd = new FormData();
+    fd.append('serial_number', serial);
+    fd.append('location', location);
+    const data = await postForm(`/cold-books/dispense/${bookId}`, fd);
+    if (data.success) {
+      showToast(data.message, 'success');
+      document.getElementById('disp-remaining').textContent  = data.remaining;
+      const prev = parseInt(document.getElementById('disp-dispensed').textContent) || 0;
+      document.getElementById('disp-dispensed').textContent = prev + 1;
+      _dispenseRemaining = data.remaining;
+      document.getElementById('dqty-avail').textContent = `المتاح: ${data.remaining} دفتر`;
+      updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+      if (data.warning) showDispenseWarning(data.remaining, data.min_quantity);
+      document.getElementById('dispense-serial').value = '';
+      document.getElementById('dispense-serial').focus();
+      loadStockAlerts();
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch(e) {
+    showToast('حدث خطأ غير متوقع', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '📤 صرف بالتسلسل';
+  }
+}
+
+// ── الصرف بالكمية
+async function doDispenseQty() {
+  const bookId   = document.getElementById('dispense-book-id').value;
+  const qty      = document.getElementById('dispense-qty').value.trim();
+  const location = document.getElementById('dispense-location').value.trim();
+  if (!location) { showToast('يجب إدخال الموقع المصروف إليه', 'error'); document.getElementById('dispense-location').focus(); return; }
+  if (!qty || parseInt(qty) < 1) { showToast('يجب إدخال كمية صحيحة', 'error'); document.getElementById('dispense-qty').focus(); return; }
+
+  const btn = document.getElementById('dispense-submit-btn');
+  btn.disabled = true; btn.textContent = '⏳ جار الصرف...';
+  try {
+    const fd = new FormData();
+    fd.append('qty', qty);
+    fd.append('location', location);
+    const data = await postForm(`/cold-books/dispense/qty/${bookId}`, fd);
+    if (data.success) {
+      showToast(data.message, 'success');
+      document.getElementById('disp-remaining').textContent  = data.remaining;
+      const prev = parseInt(document.getElementById('disp-dispensed').textContent) || 0;
+      document.getElementById('disp-dispensed').textContent = prev + data.inserted;
+      _dispenseRemaining = data.remaining;
+      document.getElementById('dqty-avail').textContent = `المتاح: ${data.remaining} دفتر`;
+      updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+      if (data.warning) showDispenseWarning(data.remaining, data.min_quantity);
+      document.getElementById('dispense-qty').value = '';
+      document.getElementById('dispense-qty').focus();
+      loadStockAlerts();
+      // ✅ تحديث عداد المصروف بالقيمة الفعلية من السيرفر
+      try {
+        const r2 = await fetch(`/cold-books/serials/${bookId}`);
+        const d2 = await r2.json();
+        document.getElementById('disp-dispensed').textContent = d2.dispensed;
+        document.getElementById('disp-remaining').textContent  = d2.remaining;
+      } catch(e){}
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch(e) {
+    showToast('حدث خطأ غير متوقع', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '📦 صرف بالكمية';
+  }
+}
+
+// ── الصرف بالروزمة (نطاق سيريال) — يستخدم bulk endpoint
+async function doDispenseRange() {
+  const bookId   = document.getElementById('dispense-book-id').value;
+  const from     = document.getElementById('dispense-range-from').value.trim();
+  const to       = document.getElementById('dispense-range-to').value.trim();
+  const location = document.getElementById('dispense-location').value.trim();
+  if (!location) { showToast('يجب إدخال الموقع المصروف إليه', 'error'); document.getElementById('dispense-location').focus(); return; }
+  if (!from || !to) { showToast('يجب إدخال نطاق السيريال', 'error'); return; }
+
+  const btn = document.getElementById('dispense-submit-btn');
+  btn.disabled = true; btn.textContent = '⏳ جار الصرف...';
+  try {
+    const fd = new FormData();
+    fd.append('serial_from', from);
+    fd.append('serial_to',   to);
+    fd.append('location',    location);
+    const data = await postForm(`/cold-books/dispense/bulk/${bookId}`, fd);
+    if (data.success) {
+      showToast(data.message, 'success');
+      document.getElementById('disp-remaining').textContent  = data.remaining;
+      const prev = parseInt(document.getElementById('disp-dispensed').textContent) || 0;
+      document.getElementById('disp-dispensed').textContent = prev + (data.inserted || 0);
+      _dispenseRemaining = data.remaining;
+      updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+      if (data.warning) showDispenseWarning(data.remaining, data.min_quantity);
+      document.getElementById('dispense-range-from').value = '';
+      document.getElementById('dispense-range-to').value   = '';
+      document.getElementById('drange-count').style.display = 'none';
+      loadStockAlerts();
+      // ✅ تحديث عداد المصروف بالقيمة الفعلية من السيرفر
+      try {
+        const r2 = await fetch(`/cold-books/serials/${bookId}`);
+        const d2 = await r2.json();
+        document.getElementById('disp-dispensed').textContent = d2.dispensed;
+        document.getElementById('disp-remaining').textContent  = d2.remaining;
+      } catch(e){}
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch(e) {
+    showToast('حدث خطأ غير متوقع', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '📋 صرف بالروزمة';
+  }
+}
+
+// ── تحديث خلية المتبقي في الجدول
+function updateRowRemaining(bookId, remaining, warning, minQty) {
+  const badge = document.querySelector(`.remaining-badge[data-book-id="${bookId}"]`);
+  if (!badge) return;
+  badge.textContent = remaining;
+  if (warning) {
+    badge.style.color = '#ff9900';
+    badge.style.textShadow = '0 0 8px rgba(255,150,0,0.4)';
+    badge.title = `⚠️ أقل من الحد الأدنى (${minQty})`;
+    const row = document.getElementById(`book-row-${bookId}`);
+    if (row) row.style.background = 'rgba(255,120,0,0.04)';
+  } else {
+    badge.style.color = 'var(--accent-cyan)';
+    badge.style.textShadow = '';
+  }
+}
+
+// ── فتح سجل الصرف (مع إمكانية الحذف)
+let _currentSerialsBookId = null;
+async function openSerialsModal(bookId, bookName) {
+  _currentSerialsBookId = bookId;
+  document.getElementById('serials-modal-title').textContent = `📋 سجل صرف — ${bookName}`;
+  document.getElementById('serials-stats').innerHTML = '<p style="color:var(--text-muted);">جار التحميل...</p>';
+  document.getElementById('serials-list').innerHTML  = '';
+  document.getElementById('serials-warning').style.display = 'none';
+  openModal('serials-modal');
+  await loadSerialsData(bookId);
+}
+
+async function loadSerialsData(bookId) {
+  try {
+    const r = await fetch(`/cold-books/serials/${bookId}`);
+    const d = await r.json();
+
+    document.getElementById('serials-stats').innerHTML = `
+      <div style="flex:1;min-width:90px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:10px;padding:10px;text-align:center;">
+        <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">الكمية الكلية</p>
+        <p style="margin:2px 0 0;font-size:1.3rem;font-weight:800;color:var(--accent-cyan);">${d.total}</p>
+      </div>
+      <div style="flex:1;min-width:90px;background:rgba(255,200,0,0.08);border:1px solid rgba(255,200,0,0.2);border-radius:10px;padding:10px;text-align:center;">
+        <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">المتبقي بالمخزن</p>
+        <p style="margin:2px 0 0;font-size:1.3rem;font-weight:800;color:${d.warning ? '#ff9900' : 'var(--accent-orange)'};">${d.remaining}</p>
+      </div>
+      <div style="flex:1;min-width:90px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.2);border-radius:10px;padding:10px;text-align:center;">
+        <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">تم صرفه</p>
+        <p style="margin:2px 0 0;font-size:1.3rem;font-weight:800;color:#ff5555;">${d.dispensed}</p>
+      </div>
+      <div style="flex:1;min-width:90px;background:rgba(255,120,0,0.08);border:1px solid rgba(255,120,0,0.2);border-radius:10px;padding:10px;text-align:center;">
+        <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">الحد الأدنى</p>
+        <p style="margin:2px 0 0;font-size:1.3rem;font-weight:800;color:#ff9900;">${d.min_quantity}</p>
+      </div>
+    `;
+
+    if (d.warning) {
+      const w = document.getElementById('serials-warning');
+      w.style.display = 'block';
+      w.innerHTML = `⚠️ <strong style="color:#ff9900;">تنبيه!</strong> <span style="color:#ffbb44;">الكمية المتبقية (${d.remaining}) وصلت أو أقل من الحد الأدنى (${d.min_quantity}). يُنصح بطلب توريد جديد.</span>`;
+    }
+
+    if (d.serials.length === 0) {
+      document.getElementById('serials-list').innerHTML =
+        '<p style="color:var(--text-muted);text-align:center;padding:24px 0;">لا توجد سريالات مصروفة بعد</p>';
+    } else {
+      _serialsLocationMap = {};
+      d.serials.forEach(s => { _serialsLocationMap[s.id] = s.location || ''; });
+      document.getElementById('serials-list').innerHTML =
+        `<p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">إجمالي <strong style="color:var(--text-primary);">${d.serials.length}</strong> دفتر مصروف — يمكن تعديل الموقع أو حذف أي دفتر لإعادته للمخزن:</p>` +
+        d.serials.map((s, i) => {
+          const rangeLabel = (s.serial_from && s.serial_to)
+            ? `<code style="color:var(--accent-cyan);">${s.serial_from}</code><span style="color:var(--text-muted);margin:0 4px;">→</span><code style="color:var(--accent-orange);">${s.serial_to}</code><span style="color:var(--text-muted);font-size:0.72rem;margin-right:4px;">(${s.serial_count} سيريال)</span>`
+            : `<span style="color:var(--text-muted);font-size:0.8rem;">بدون تسلسل</span>`;
+          return `
+          <div class="serial-row" id="serial-row-${s.id}">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="background:rgba(255,160,0,0.15);color:#ffb347;font-size:0.72rem;padding:2px 7px;border-radius:5px;font-weight:700;">دفتر ${s.book_index}</span>
+              ${rangeLabel}
+              <span id="location-badge-${s.id}">${s.location ? `<span style="background:rgba(79,156,249,0.12);border:1px solid rgba(79,156,249,0.25);color:#7ab8ff;font-size:0.72rem;padding:2px 8px;border-radius:5px;">📍 ${s.location}</span>` : ''}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <small style="color:var(--text-muted);">${(s.dispensed_at||'').substring(0,16)}</small>
+              <button class="btn-edit-serial" ${s.id ? `onclick="editDispenseLocation(${s.id})"` : 'disabled style="opacity:0.4;cursor:not-allowed;" title="لا يمكن تعديل هذا السجل"'} title="تعديل الموقع المصروف إليه">✏️ تعديل</button>
+              <button class="btn-del-serial" ${s.id ? `onclick="deleteDispenseSerial(${s.id}, 'دفتر ${s.book_index}', ${bookId})"` : 'disabled style="opacity:0.4;cursor:not-allowed;" title="لا يمكن حذف هذا السجل"'} title="حذف وإعادة الكمية للمخزن">🗑️ حذف</button>
+            </div>
+          </div>`;
+        }).join('');
+    }
+  } catch(e) {
+    document.getElementById('serials-list').innerHTML =
+      '<p style="color:#ff5555;text-align:center;">فشل تحميل البيانات</p>';
+  }
+}
+
+// ── الصرف الجماعي
+function openBulkDispenseModal() {
+  document.getElementById('bulk-book-select').value = '';
+  document.getElementById('bulk-serial-from').value = '';
+  document.getElementById('bulk-serial-to').value   = '';
+  document.getElementById('bulk-location').value    = '';
+  document.getElementById('bulk-book-info').style.display  = 'none';
+  document.getElementById('bulk-count-info').style.display = 'none';
+  document.getElementById('bulk-warning').style.display    = 'none';
+  openModal('bulk-dispense-modal');
+  setTimeout(() => document.getElementById('bulk-book-select').focus(), 300);
+}
+
+let _bulkRemaining = null;
+let _bulkMinQty    = null;
+
+async function onBulkBookChange() {
+  const sel = document.getElementById('bulk-book-select');
+  const opt = sel.options[sel.selectedIndex];
+  const bookId = sel.value;
+  if (!bookId) {
+    document.getElementById('bulk-book-info').style.display = 'none';
+    _bulkRemaining = null;
+    return;
+  }
+  const seqFrom = opt.dataset.from;
+  const seqTo   = opt.dataset.to;
+  document.getElementById('bulk-book-range').textContent = (seqFrom && seqTo) ? `${seqFrom} → ${seqTo}` : 'غير محدد';
+  document.getElementById('bulk-book-remaining').textContent = '⏳';
+  document.getElementById('bulk-book-info').style.display = 'block';
+  document.getElementById('bulk-warning').style.display   = 'none';
+  try {
+    const r = await fetch(`/cold-books/serials/${bookId}`);
+    const d = await r.json();
+    _bulkRemaining = d.remaining;
+    _bulkMinQty    = d.min_quantity;
+    document.getElementById('bulk-book-remaining').textContent = d.remaining;
+    document.getElementById('bulk-book-minqty').textContent    = d.min_quantity;
+    if (d.warning) {
+      document.getElementById('bulk-warning').style.display = 'block';
+      document.getElementById('bulk-warning-msg').textContent =
+        `الكمية المتبقية (${d.remaining}) وصلت للحد الأدنى (${d.min_quantity})`;
+    }
+    if (seqFrom && !document.getElementById('bulk-serial-from').value)
+      document.getElementById('bulk-serial-from').value = seqFrom;
+  } catch(e) {
+    document.getElementById('bulk-book-remaining').textContent = '—';
+  }
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const from = parseInt(document.getElementById('bulk-serial-from').value);
+  const to   = parseInt(document.getElementById('bulk-serial-to').value);
+  const info = document.getElementById('bulk-count-info');
+  if (!isNaN(from) && !isNaN(to) && to >= from) {
+    const count = to - from + 1;
+    document.getElementById('bulk-count-num').textContent = count.toLocaleString('ar-EG');
+    info.style.display = 'block';
+    info.style.background = (_bulkRemaining !== null && count > _bulkRemaining)
+      ? 'rgba(255,50,50,0.1)' : 'rgba(0,229,160,0.08)';
+    info.style.borderColor = (_bulkRemaining !== null && count > _bulkRemaining)
+      ? 'rgba(255,80,80,0.4)' : 'rgba(0,229,160,0.2)';
+    document.getElementById('bulk-count-num').style.color = (_bulkRemaining !== null && count > _bulkRemaining)
+      ? '#ff5555' : 'var(--accent-cyan)';
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+async function doBulkDispense() {
+  const bookId   = document.getElementById('bulk-book-select').value;
+  const from     = document.getElementById('bulk-serial-from').value.trim();
+  const to       = document.getElementById('bulk-serial-to').value.trim();
+  const location = document.getElementById('bulk-location').value.trim();
+  if (!bookId)   { showToast('يجب اختيار الدفتر', 'error'); return; }
+  if (!from||!to){ showToast('يجب إدخال نطاق السيريال', 'error'); return; }
+  if (!location) { showToast('يجب إدخال الموقع', 'error'); document.getElementById('bulk-location').focus(); return; }
+
+  const btn = document.getElementById('bulk-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جار الصرف...';
+
+  const fd = new FormData();
+  fd.append('serial_from', from);
+  fd.append('serial_to',   to);
+  fd.append('location',    location);
+  const data = await postForm(`/cold-books/dispense/bulk/${bookId}`, fd);
+
+  btn.disabled = false;
+  btn.textContent = '⚡ تأكيد الصرف الجماعي';
+
+  if (data.success) {
+    showToast(data.message, 'success');
+    updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+    document.getElementById('bulk-book-remaining').textContent = data.remaining;
+    _bulkRemaining = data.remaining;
+    if (data.warning) {
+      document.getElementById('bulk-warning').style.display = 'block';
+      document.getElementById('bulk-warning-msg').textContent =
+        `الكمية المتبقية (${data.remaining}) وصلت للحد الأدنى (${data.min_quantity})`;
+    }
+    loadStockAlerts();
+    closeModal('bulk-dispense-modal');
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+let _serialsLocationMap = {};
+
+async function editDispenseLocation(dispenseId) {
+  const current = _serialsLocationMap[dispenseId] || '';
+  const newLocation = prompt('📍 أدخل الموقع الجديد المصروف إليه:', current);
+  if (newLocation === null) return; // إلغاء
+  const trimmed = newLocation.trim();
+  if (!trimmed) { showToast('يجب إدخال الموقع', 'error'); return; }
+  if (trimmed === current) return;
+
+  const fd = new FormData();
+  fd.append('location', trimmed);
+  const data = await postForm(`/cold-books/dispense/edit-location/${dispenseId}`, fd);
+  if (data.success) {
+    showToast(data.message, 'success');
+    _serialsLocationMap[dispenseId] = data.location;
+    const badge = document.getElementById(`location-badge-${dispenseId}`);
+    if (badge) {
+      badge.innerHTML = `<span style="background:rgba(79,156,249,0.12);border:1px solid rgba(79,156,249,0.25);color:#7ab8ff;font-size:0.72rem;padding:2px 8px;border-radius:5px;">📍 ${data.location}</span>`;
+    }
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+async function deleteDispenseSerial(dispenseId, serial, bookId) {
+  if (!confirm(`هل تريد حذف السيريال "${serial}" وإعادة الكمية للمخزن؟`)) return;
+  const fd = new FormData();
+  const data = await postForm(`/cold-books/dispense/delete/${dispenseId}`, fd);
+  if (data.success) {
+    showToast(data.message, 'success');
+    const row = document.getElementById(`serial-row-${dispenseId}`);
+    if (row) row.remove();
+    updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+    loadStockAlerts();
+    // ✅ إعادة تحميل إحصائيات modal السجل بعد الحذف
+    await loadSerialsData(bookId);
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+
+// (الدوال القديمة أُزيلت — الكود الجديد في الأعلى)
+
+// ══════════════════════════════════════════════════
+// ── إضافة كمية على صنف موجود
+// ══════════════════════════════════════════════════
+let _addQtyCurrentQty = 0;
+let _addQtySeqTo      = null;
+let _addQtyPages      = 50;
+
+function openAddQtyModal(bookId, bookName, currentQty, seqFrom, seqTo, pages) {
+  _addQtyCurrentQty = parseInt(currentQty) || 0;
+  _addQtySeqTo      = (seqTo && seqTo !== '') ? parseInt(seqTo) : null;
+  _addQtyPages      = parseInt(pages) || 50;
+
+  document.getElementById('add-qty-book-id').value          = bookId;
+  document.getElementById('add-qty-has-serial').value       = (seqFrom && seqTo) ? '1' : '0';
+  document.getElementById('add-qty-old-seq-to').value       = seqTo || '';
+  document.getElementById('add-qty-pages').value            = _addQtyPages;
+  document.getElementById('add-qty-book-name').textContent  = bookName;
+  document.getElementById('add-qty-current').textContent    = _addQtyCurrentQty;
+  document.getElementById('add-qty-preview').textContent    = '0';
+  document.getElementById('add-qty-total-preview').textContent = _addQtyCurrentQty;
+  document.getElementById('add-qty-value').value = '';
+  document.getElementById('add-qty-date').value  = '';
+
+  // إظهار أو إخفاء قسم التسلسل
+  const serialSection = document.getElementById('add-qty-serial-section');
+  if (seqFrom && seqFrom !== '' && seqTo && seqTo !== '') {
+    serialSection.style.display = '';
+    document.getElementById('add-qty-new-seq-from').value = '';
+    document.getElementById('add-qty-new-seq-to').value   = '';
+  } else {
+    serialSection.style.display = 'none';
+  }
+
+  openModal('add-qty-modal');
+  setTimeout(() => document.getElementById('add-qty-value').focus(), 300);
+}
+
+function updateQtyPreview() {
+  const added = parseInt(document.getElementById('add-qty-value').value) || 0;
+  document.getElementById('add-qty-preview').textContent       = added > 0 ? added : '0';
+  document.getElementById('add-qty-total-preview').textContent = _addQtyCurrentQty + (added > 0 ? added : 0);
+
+  // حساب التسلسل الجديد تلقائياً
+  const hasSerial = document.getElementById('add-qty-has-serial').value === '1';
+  if (hasSerial && added > 0 && _addQtySeqTo !== null) {
+    const newSeqFrom = _addQtySeqTo + 1;
+    const newSeqTo   = _addQtySeqTo + (added * _addQtyPages);
+    document.getElementById('add-qty-new-seq-from').value = newSeqFrom;
+    document.getElementById('add-qty-new-seq-to').value   = newSeqTo;
+  } else if (hasSerial) {
+    document.getElementById('add-qty-new-seq-from').value = '';
+    document.getElementById('add-qty-new-seq-to').value   = '';
+  }
+}
+
+async function doAddQuantity() {
+  const bookId    = document.getElementById('add-qty-book-id').value;
+  const qty       = document.getElementById('add-qty-value').value.trim();
+  const date      = document.getElementById('add-qty-date').value;
+  const hasSerial = document.getElementById('add-qty-has-serial').value === '1';
+
+  if (!qty || parseInt(qty) <= 0) {
+    showToast('يجب إدخال كمية أكبر من صفر', 'error');
+    document.getElementById('add-qty-value').focus();
+    return;
+  }
+
+  const btn = document.getElementById('add-qty-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جار الإضافة...';
+
+  const fd = new FormData();
+  fd.append('added_quantity', qty);
+  if (date) fd.append('last_purchase_date', date);
+
+  // إرسال التسلسل الجديد إن وُجد
+  if (hasSerial) {
+    const newSeqTo = document.getElementById('add-qty-new-seq-to').value;
+    if (newSeqTo) fd.append('new_seq_to', newSeqTo);
+  }
+
+  const data = await postForm(`/cold-books/add-quantity/${bookId}`, fd);
+
+  btn.disabled = false;
+  btn.textContent = '✅ تأكيد الإضافة';
+
+  if (data.success) {
+    showToast(data.message, 'success');
+    // تحديث الكمية الكلية في الجدول
+    const row = document.getElementById(`book-row-${bookId}`);
+    if (row) {
+      const qtyCell = row.querySelector('td:nth-child(6) span');
+      if (qtyCell) qtyCell.textContent = data.new_quantity;
+      const addBtn = row.querySelector('.btn-add-qty');
+      if (addBtn) {
+        addBtn.dataset.bookQty = data.new_quantity;
+        if (data.new_seq_to) {
+          addBtn.dataset.seqTo = data.new_seq_to;
+          // تحديث زر الصرف كمان
+          const dispenseBtn = row.querySelector('.btn-success');
+          if (dispenseBtn) dispenseBtn.dataset.seqTo = data.new_seq_to;
+        }
+      }
+    }
+    // تحديث خلية المتبقي
+    updateRowRemaining(bookId, data.remaining, data.warning, data.min_quantity);
+    loadStockAlerts();
+    closeModal('add-qty-modal');
+  } else {
+    showToast(data.message || 'حدث خطأ', 'error');
+  }
+}
+</script>
+{% endblock %}

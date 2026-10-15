@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}نظام ERP{% endblock %} — نظام إدارة الموارد</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;900&family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <!-- Background Orbs -->
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-icon">🏢</div>
+          <div class="brand-text">
+            <h2>نظام ERP</h2>
+            <span>برمجة : محمد ناصر عبدالله</span>
+          </div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">الرئيسية</div>
+          <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+            <span class="nav-icon">📊</span>
+            <span>لوحة التحكم</span>
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">الوحدات</div>
+          <a href="{{ url_for('users') }}" class="nav-item {% if request.endpoint in ['users','add_user','edit_user','edit_user_page'] %}active{% endif %}">
+            <span class="nav-icon">👥</span>
+            <span>GPIT Team</span>
+          </a>
+          <a href="{{ url_for('sap') }}" class="nav-item {% if request.endpoint in ['sap','add_sap','edit_sap'] %}active{% endif %}">
+            <span class="nav-icon">🔄</span>
+            <span>معاملات SAP</span>
+          </a>
+          <a href="{{ url_for('other_users') }}" class="nav-item {% if request.endpoint == 'other_users' %}active{% endif %}">
+            <span class="nav-icon">🔐</span>
+            <span>يوزرات أخرى</span>
+            <span class="nav-badge">محمي</span>
+          </a>
+          <a href="{{ url_for('cold_books') }}" class="nav-item {% if request.endpoint in ['cold_books','add_cold_book','edit_cold_book'] %}active{% endif %}">
+            <span class="nav-icon">📋</span>
+            <span>دفاتر + ادوات المخازن المبردة</span>
+          </a>
+          <a href="{{ url_for('dispense_log') }}" class="nav-item {% if request.endpoint == 'dispense_log' %}active{% endif %}">
+            <span class="nav-icon">📜</span>
+            <span>سجل الصرف</span>
+          </a>
+          <a href="{{ url_for('empty_books') }}" class="nav-item {% if request.endpoint == 'empty_books' %}active{% endif %}">
+            <span class="nav-icon">📚</span>
+            <span>الدفاتر الفارغة والمستخدمة</span>
+          </a>
+          <a href="{{ url_for('receipt_inquiry') }}" target="_blank" class="nav-item {% if request.endpoint == 'receipt_inquiry' %}active{% endif %}">
+            <span class="nav-icon">📦</span>
+            <span>استعلام دفتر إيصال شحن</span>
+          </a>
+          <a href="{{ url_for('weight_diff_receipts') }}" class="nav-item {% if request.endpoint == 'weight_diff_receipts' %}active{% endif %}">
+            <span class="nav-icon">⚖️</span>
+            <span>ايصالات فروق أوزان</span>
+          </a>
+          <a href="{{ url_for('duplicate_receipts') }}" class="nav-item {% if request.endpoint == 'duplicate_receipts' %}active{% endif %}">
+            <span class="nav-icon">🔁</span>
+            <span>الايصالات المكررة</span>
+          </a>
+          <a href="{{ url_for('connected_users') }}" class="nav-item {% if request.endpoint == 'connected_users' %}active{% endif %}">
+            <span class="nav-icon">👥</span>
+            <span>المتصلون</span>
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">الإعدادات</div>
+          <a href="{{ url_for('admins') }}" class="nav-item {% if request.endpoint in ['admins','add_admin','edit_admin'] %}active{% endif %}">
+            <span class="nav-icon">⚙️</span>
+            <span>GPIT Team إدارة</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar">{{ session.admin_username[0]|upper if session.admin_username else 'A' }}</div>
+          <div class="user-details">
+            <h4>{{ session.admin_username or 'مسؤول النظام' }}</h4>
+            <span>مدير النظام</span>
+          </div>
+        </div>
+        <a href="{{ url_for('logout') }}" class="btn-logout">
+          <span>🚪</span> تسجيل الخروج
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1>{% block page_title %}لوحة التحكم{% endblock %}</h1>
+          <p>{% block page_subtitle %}نظام إدارة الموارد المؤسسية{% endblock %}</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="time-display" id="live-clock">⏰ --:--:--</div>
+        </div>
+      </header>
+
+      <div class="page-body">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>استعلام عن دفتر إيصال شحن</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;900&family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .inquiry-wrap { width: 100%; max-width: 560px; }
+    .inquiry-card {
+      background: var(--bg-card);
+      border-radius: 22px;
+      padding: 36px 32px;
+      box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,0.12));
+      border: 1px solid rgba(107,58,42,0.1);
+      position: relative;
+      z-index: 1;
+    }
+    .inquiry-header { text-align: center; margin-bottom: 28px; }
+    .inquiry-header .icon {
+      width: 64px; height: 64px; border-radius: 18px;
+      background: var(--grad-accent, linear-gradient(135deg,#2563eb,#0891b2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px; margin: 0 auto 14px;
+      box-shadow: var(--shadow-blue, 0 6px 20px rgba(37,99,235,0.3));
+    }
+    .inquiry-header h1 { font-size: 1.35rem; margin: 0 0 6px; color: var(--text-primary, #3a2a1e); }
+    .inquiry-header p { margin: 0; color: var(--text-secondary, #8a7460); font-size: 0.92rem; }
+
+    .search-row {
+      display: flex; gap: 10px; margin-bottom: 8px;
+    }
+    .search-row input {
+      flex: 1;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1.5px solid #e6d5c3;
+      background: var(--bg-secondary, #f5ebe0);
+      font-family: inherit;
+      font-size: 1rem;
+      text-align: center;
+      letter-spacing: 0.03em;
+    }
+    .search-row input:focus { outline: none; border-color: var(--accent-blue, #2563eb); }
+    .hint { text-align: center; font-size: 0.78rem; color: var(--text-secondary, #8a7460); margin-bottom: 22px; }
+
+    .result-box {
+      margin-top: 22px;
+      border-radius: 16px;
+      padding: 22px;
+      animation: fadeIn 0.35s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .result-used   { background: #f0fdf4; border: 1.5px solid #bbf7d0; }
+    .result-unused  { background: #fff4ed; border: 1.5px solid #fbc99a; }
+    .result-weightdiff { background: #fff7ed; border: 1.5px solid #fdba74; }
+
+    .result-status {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.05rem; font-weight: 800; margin-bottom: 14px;
+    }
+    .result-status .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .result-used .dot { background: #059669; box-shadow: 0 0 0 4px rgba(5,150,105,0.15); }
+    .result-unused .dot { background: #d97706; box-shadow: 0 0 0 4px rgba(217,119,6,0.15); }
+    .result-weightdiff .dot { background: #f97316; box-shadow: 0 0 0 4px rgba(249,115,22,0.15); }
+    .result-used .result-status { color: #047857; }
+    .result-unused .result-status { color: #b45309; }
+    .result-weightdiff .result-status { color: #c2410c; }
+
+    .detail-row {
+      display: flex; justify-content: space-between;
+      padding: 9px 0; border-bottom: 1px dashed rgba(107,58,42,0.12);
+      font-size: 0.92rem;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row .label { color: var(--text-secondary, #8a7460); }
+    .detail-row .value { font-weight: 700; color: var(--text-primary, #3a2a1e); }
+
+    .not-found-msg { font-size: 0.9rem; color: #b45309; line-height: 1.6; }
+
+    .footer-note { text-align: center; margin-top: 20px; font-size: 0.75rem; color: var(--text-secondary, #8a7460); }
+
+    /* ══ MSGBOX تنبيه: دفتر مصروف + مسجل فروق أوزان ══ */
+    .alert-overlay {
+      position: fixed; inset: 0; z-index: 999;
+      background: rgba(30, 15, 5, 0.55);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      animation: overlayFade 0.2s ease;
+    }
+    @keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
+    .alert-box {
+      background: #fff; border-radius: 18px; max-width: 420px; width: 100%;
+      padding: 28px 26px 22px; text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      border-top: 5px solid #dc2626;
+      animation: alertPop 0.25s ease;
+    }
+    @keyframes alertPop { from { opacity: 0; transform: scale(0.92) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    .alert-box .alert-icon { font-size: 2.6rem; margin-bottom: 10px; }
+    .alert-box h2 { margin: 0 0 12px; color: #b91c1c; font-size: 1.15rem; }
+    .alert-box p { margin: 0 0 20px; color: var(--text-primary, #3a2a1e); font-size: 0.95rem; line-height: 1.9; }
+    .alert-box button {
+      background: #dc2626; color: #fff; border: none; border-radius: 12px;
+      padding: 11px 34px; font-family: inherit; font-size: 0.95rem; font-weight: 700;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .alert-box button:hover { background: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="inquiry-wrap">
+    <div class="inquiry-card">
+      <div class="inquiry-header">
+        <div class="icon">📦</div>
+        <h1>استعلام عن دفتر إيصال شحن</h1>
+        <p>ادخل رقم التسلسل للتحقق من حالة استخدامه</p>
+      </div>
+
+      <form method="get" action="{{ url_for('receipt_inquiry') }}">
+        <div class="search-row">
+          <input type="text" name="serial" inputmode="numeric" placeholder="اكتب رقم التسلسل هنا..."
+                 value="{{ serial }}" autofocus>
+          <button type="submit" class="btn btn-primary">بحث 🔍</button>
+        </div>
+      </form>
+      <div class="hint">مثال: لو رقم التسلسل يقع بين نطاق دفتر مصروف، بيظهرلك تفاصيله فوراً</div>
+
+      {% if searched %}
+        {% if result %}
+          <div class="result-box result-used">
+            <div class="result-status"><span class="dot"></span> بيانات الدفتر للجهه المرسلة اليه ✅</div>
+            <div class="detail-row"><span class="label">التسلسل المطلوب</span><span class="value">{{ serial }}</span></div>
+            {% if result['serial_from'] and result['serial_to'] %}
+            <div class="detail-row"><span class="label">نطاق الدفتر</span><span class="value">{{ result['serial_from'] }} — {{ result['serial_to'] }}</span></div>
+            {% endif %}
+            {% if result['book_index'] %}
+            <div class="detail-row"><span class="label">رقم الدفتر</span><span class="value">دفتر {{ result['book_index'] }}</span></div>
+            {% endif %}
+            <div class="detail-row"><span class="label">تاريخ الصرف</span><span class="value">{{ result['dispensed_at'] }}</span></div>
+            <div class="detail-row"><span class="label">الموقع</span><span class="value">{{ result['location'] or '—' }}</span></div>
+          </div>
+        {% else %}
+          <div class="result-box result-unused">
+            <div class="result-status"><span class="dot"></span> هذا التسلسل غير مُستخدم ❌</div>
+            <p class="not-found-msg">لم يتم العثور على هذا الرقم ضمن دفاتر إيصال الشحن المصروفة حتى الآن.</p>
+          </div>
+        {% endif %}
+
+        {% if weight_diff_matches %}
+          <div class="result-box result-weightdiff">
+            <div class="result-status"><span class="dot"></span> ⚖️ تم تسجيله فروق أوزان</div>
+            {% for m in weight_diff_matches %}
+              <div class="detail-row" style="border-bottom:none;padding-bottom:0;">
+                <span class="value" style="font-size:0.82rem;">
+                  {% if m['product_type'] == 'corn' %}
+                    <span style="background:rgba(217,119,6,0.15);color:#b45309;border-radius:20px;padding:3px 12px;">🌽 ذرة</span>
+                  {% elif m['product_type'] == 'qanater' %}
+                    <span style="background:rgba(139,92,246,0.15);color:#7c3aed;border-radius:20px;padding:3px 12px;">↩️ استرداد القناطر</span>
+                  {% else %}
+                    <span style="background:rgba(180,120,60,0.15);color:#8a5a2b;border-radius:20px;padding:3px 12px;">🥔 بطاطس</span>
+                  {% endif %}
+                  {% if weight_diff_matches|length > 1 %}
+                  <span style="color:var(--text-secondary,#8a7460);">— تسجيل رقم {{ loop.index }}</span>
+                  {% endif %}
+                </span>
+              </div>
+              <div class="detail-row"><span class="label">الموقع المنصرف منه</span><span class="value">{{ m['dispense_room'] or '—' }}</span></div>
+              {% if m['dispense_to'] %}
+              <div class="detail-row"><span class="label">الموقع المرسل إليه</span><span class="value">{{ m['dispense_to'] }}</span></div>
+              {% endif %}
+              <div class="detail-row"><span class="label">التاريخ</span><span class="value">{{ m['receipt_date'] or '—' }}</span></div>
+              <div class="detail-row"><span class="label">الصنف</span><span class="value">{{ m['category'] or '—' }}</span></div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endif %}
+
+      <div class="footer-note">متابعة ايصالات الشحن — برمجة : محمد ناصر عبدالله</div>
+    </div>
+  </div>
+
+  {% if result and weight_diff_matches %}
+  <div class="alert-overlay" id="msgbox-alert">
+    <div class="alert-box">
+      <div class="alert-icon">⚠️</div>
+      <h2>تنبيه</h2>
+      <p>هذا الدفتر تم صرفه واستخدامه بالفعل .. اذا كان لديك منه نسخة ثانية حالياً يرجى توقفها والرجوع للمراجعة.</p>
+      <button onclick="document.getElementById('msgbox-alert').remove()">تم الاطّلاع، إغلاق</button>
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

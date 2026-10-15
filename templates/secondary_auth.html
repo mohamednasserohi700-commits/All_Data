@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}المصادقة الثانوية{% endblock %}
+{% block page_title %}وحدة محمية{% endblock %}
+{% block page_subtitle %}يتطلب الوصول كلمة مرور ثانوية{% endblock %}
+
+{% block content %}
+<div class="auth-gate">
+  <div class="auth-gate-box">
+    <div class="auth-gate-icon">🔐</div>
+    <h2>منطقة محمية</h2>
+    <p>هذه الوحدة محمية بكلمة مرور ثانوية. أدخل كلمة المرور للمتابعة.</p>
+    <div class="form-group">
+      <input type="password" class="form-control" id="secondary-password-input" 
+             placeholder="أدخل كلمة المرور الثانوية"
+             onkeypress="if(event.key==='Enter') verifySecondaryAuth()">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="verifySecondaryAuth()">
+      🔓 فتح الوحدة
+    </button>
+    <div style="margin-top: 16px;">
+      <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">← العودة للرئيسية</a>
+    </div>
+    <p style="margin-top: 20px; font-size: 0.72rem; color: var(--text-muted);">
+      : <strong style="color: var(--accent-orange);"></strong>
+    </p>
+  </div>
+</div>
+{% endblock %}

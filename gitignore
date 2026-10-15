@@ -1,0 +1,6 @@
+# بيانات محلية — متترفعش على GitHub/Railway (البيانات الحقيقية في PostgreSQL)
+instance/
+*.db
+__pycache__/
+*.pyc
+.env

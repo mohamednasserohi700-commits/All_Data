@@ -1,0 +1,657 @@
+{% extends "base.html" %}
+{% block title %}ايصالات فروق أوزان{% endblock %}
+{% block page_title %}⚖️ ايصالات فروق أوزان{% endblock %}
+{% block page_subtitle %}استيراد وإدارة ايصالات فروق الأوزان وربطها بدفتر إيصال الشحن{% endblock %}
+
+{% block content %}
+
+<!-- ══ إحصائيات سريعة ══ -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">⚖️</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.total }}</span>
+      <span class="stat-label">إجمالي السجلات</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🧾</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.unique_receipts }}</span>
+      <span class="stat-label">رقم ايصال شحن مختلف</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.rooms_count }}</span>
+      <span class="stat-label">موقع/غرفة مختلفة</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_records }}</span>
+      <span class="stat-label">نتيجة الفلتر الحالي</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ تبويبات الصنف (بطاطس / ذرة) ══ -->
+<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+  {% set base_qs = (('&search=' ~ f_search) if f_search else '') %}
+  <a href="{{ url_for('weight_diff_receipts') }}?type=all{{ base_qs }}"
+     class="btn {{ 'btn-primary' if f_type == 'all' else 'btn-secondary' }} btn-sm">
+     📋 الكل <span style="opacity:0.75;">({{ counts.total or 0 }})</span>
+  </a>
+  <a href="{{ url_for('weight_diff_receipts') }}?type=potato{{ base_qs }}"
+     class="btn {{ 'btn-primary' if f_type == 'potato' else 'btn-secondary' }} btn-sm">
+     🥔 بطاطس <span style="opacity:0.75;">({{ counts.potato_count or 0 }})</span>
+  </a>
+  <a href="{{ url_for('weight_diff_receipts') }}?type=corn{{ base_qs }}"
+     class="btn {{ 'btn-primary' if f_type == 'corn' else 'btn-secondary' }} btn-sm">
+     🌽 ذرة <span style="opacity:0.75;">({{ counts.corn_count or 0 }})</span>
+  </a>
+  <a href="{{ url_for('weight_diff_receipts') }}?type=qanater{{ base_qs }}"
+     class="btn {{ 'btn-primary' if f_type == 'qanater' else 'btn-secondary' }} btn-sm">
+     ↩️ استرداد من غرفة القناطر <span style="opacity:0.75;">({{ counts.qanater_count or 0 }})</span>
+  </a>
+</div>
+
+<!-- ══ شريط البحث + الاستيراد ══ -->
+<div class="table-card" style="margin-bottom:20px;padding:20px 24px;">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;justify-content:space-between;">
+    <form method="get" action="{{ url_for('weight_diff_receipts') }}" style="flex:1;min-width:240px;display:flex;gap:10px;">
+      <input type="hidden" name="type" value="{{ f_type }}">
+      <input type="text" name="search" class="form-control" placeholder="ابحث برقم الايصال، الموقع، رقم السيارة..."
+             value="{{ f_search }}" style="flex:1;">
+      <button type="submit" class="btn btn-primary">🔍 بحث</button>
+      {% if f_search %}
+      <a href="{{ url_for('weight_diff_receipts') }}?type={{ f_type }}" class="btn btn-secondary">↺ إعادة</a>
+      {% endif %}
+    </form>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-success" onclick="openImportModal('potato')">🥔 استيراد ملف البطاطس</button>
+      <button class="btn btn-success" onclick="openImportModal('corn')">🌽 استيراد ملف الذرة</button>
+      <button class="btn btn-success" onclick="openImportModal('qanater')">↩️ استيراد ملف استرداد القناطر</button>
+      <button class="btn btn-secondary" onclick="openDuplicatesModal()">🔁 الايصالات المكررة</button>
+      {% if stats.total > 0 %}
+      <button class="btn btn-danger" onclick="deleteAllRecords()">🗑️ حذف {{ 'كل البيانات' if f_type == 'all' else ('بيانات البطاطس' if f_type == 'potato' else ('بيانات الذرة' if f_type == 'corn' else 'بيانات استرداد القناطر')) }}</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ══ شريط الإجراءات الجماعية ══ -->
+<div id="bulk-action-bar" style="
+  display:none;
+  background:linear-gradient(135deg,rgba(239,68,68,0.15),rgba(220,38,38,0.1));
+  border:1px solid rgba(239,68,68,0.4);
+  border-radius:12px;
+  padding:14px 20px;
+  margin-bottom:16px;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;">
+  <span id="bulk-count-label" style="color:#f87171;font-weight:700;font-size:0.95rem;">
+    0 سجل محدد
+  </span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()">
+      🗑️ حذف المحدد
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="clearSelection()">
+      ✕ إلغاء التحديد
+    </button>
+  </div>
+</div>
+
+<!-- ══ header الجدول ══ -->
+<div class="section-header">
+  <div class="section-title">
+    <h2>🧾 سجلات فروق الأوزان</h2>
+    <p>
+      عرض {{ records|length }} من {{ total_records }} سجل
+      {% if f_search %}
+      — <span style="color:var(--accent-orange);">فلتر نشط</span>
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- ══ الجدول ══ -->
+<div class="table-card">
+  <div class="table-responsive">
+    {% if records %}
+    <table id="wd-table">
+      <thead>
+        <tr>
+          <th style="width:42px;text-align:center;">
+            <input type="checkbox" id="select-all" title="تحديد الكل"
+              style="width:17px;height:17px;cursor:pointer;accent-color:var(--accent-red,#ef4444);"
+              onchange="toggleSelectAll(this.checked)">
+          </th>
+          <th>م</th>
+          <th>المنتج</th>
+          <th>التاريخ</th>
+          <th>رقم السيارة</th>
+          <th>الاذن</th>
+          <th>الصنف</th>
+          <th>جهة التعنيف</th>
+          <th>رقم غرفة المنصرف</th>
+          <th>ايصال الشحن</th>
+          <th>الثلاجة (الورقة)</th>
+          <th>حذف</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr id="wd-row-{{ r.id }}">
+          <td style="text-align:center;">
+            <input type="checkbox" class="row-check" value="{{ r.id }}"
+              style="width:17px;height:17px;cursor:pointer;accent-color:var(--accent-red,#ef4444);"
+              onchange="updateBulkBar()">
+          </td>
+          <td><span class="badge badge-blue">{{ r.seq_no or '—' }}</span></td>
+          <td>
+            {% if r.product_type == 'corn' %}
+            <span style="background:rgba(217,119,6,0.15);color:#b45309;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">🌽 ذرة</span>
+            {% elif r.product_type == 'qanater' %}
+            <span style="background:rgba(139,92,246,0.15);color:#7c3aed;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">↩️ استرداد القناطر</span>
+            {% else %}
+            <span style="background:rgba(180,120,60,0.15);color:#8a5a2b;border-radius:20px;padding:3px 12px;font-size:0.82rem;font-weight:600;white-space:nowrap;">🥔 بطاطس</span>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-purple">📅 {{ r.receipt_date or '—' }}</span></td>
+          <td>{{ r.car_number or '—' }}</td>
+          <td>{{ r.permit_number or '—' }}</td>
+          <td>{{ r.category or '—' }}</td>
+          <td>{{ r.entity or '—' }}</td>
+          <td>
+            {% if r.dispense_room %}
+            <span style="
+              display:inline-flex;align-items:center;gap:5px;
+              background:rgba(139,92,246,0.15);color:var(--accent-purple);
+              border:1px solid rgba(139,92,246,0.3);border-radius:20px;
+              padding:3px 12px;font-size:0.85rem;font-weight:600;">
+              📍 {{ r.dispense_room }}
+            </span>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+          <td>
+            <code style="color:var(--accent-cyan);background:rgba(0,200,255,0.1);
+                         padding:3px 10px;border-radius:6px;font-size:0.85rem;font-weight:700;">
+              {{ r.receipt_number }}
+            </code>
+          </td>
+          <td>
+            {% if r.source_sheet %}
+            <span style="color:var(--text-secondary,#8a7460);font-size:0.82rem;">🧊 {{ r.source_sheet }}</span>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+          <td>
+            <button class="btn btn-danger btn-sm" data-id="{{ r.id }}" data-receipt="{{ r.receipt_number }}"
+              onclick="deleteSingle(this)">🗑️ حذف</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if total_pages > 1 %}
+    {% set bp = url_for('weight_diff_receipts') ~ '?search=' ~ f_search ~ '&page=' %}
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:20px;flex-wrap:wrap;">
+      {% if page > 1 %}
+      <a href="{{ bp }}{{ page-1 }}" class="btn btn-secondary btn-sm">‹ السابق</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">‹ السابق</button>
+      {% endif %}
+
+      {% for p in range(1, total_pages+1) %}
+        {% if p == page %}
+        <span class="btn btn-primary btn-sm" style="min-width:38px;">{{ p }}</span>
+        {% elif p == 1 or p == total_pages or (p >= page-2 and p <= page+2) %}
+        <a href="{{ bp }}{{ p }}" class="btn btn-secondary btn-sm" style="min-width:38px;">{{ p }}</a>
+        {% elif p == page-3 or p == page+3 %}
+        <span style="color:var(--text-muted);padding:0 4px;">…</span>
+        {% endif %}
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="{{ bp }}{{ page+1 }}" class="btn btn-secondary btn-sm">التالي ›</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">التالي ›</button>
+      {% endif %}
+
+      <span style="color:var(--text-muted);font-size:0.85rem;margin-right:8px;">
+        صفحة {{ page }} من {{ total_pages }}
+      </span>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:3rem;margin-bottom:12px;">📭</div>
+      <h3 style="color:var(--text-muted);margin-bottom:8px;">لا توجد سجلات</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem;">
+        {% if f_search %}لا يوجد أي سجلات تطابق البحث{% else %}اضغط "استيراد ملف البطاطس" أو "استيراد ملف الذرة" أو "استيراد ملف استرداد القناطر" لإضافة أول سجل{% endif %}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ══ مودال الاستيراد (مشترك بين البطاطس والذرة) ══ -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="import-modal-title">⬆️ استيراد ايصالات فروق أوزان</h3>
+      <button class="modal-close" onclick="closeModal('import-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:16px;line-height:1.7;">
+        ارفع ملف Excel (.xlsx) الكامل بكل ورقاته (كل ثلاجة في ورقة) — هيتم استيراد
+        <b>كل الورقات دفعة واحدة</b> تلقائيًا، مش محتاج تستورد كل ورقة لوحدها.<br>
+        ترتيب الأعمدة في كل ورقة: <b id="import-modal-columns">م، التاريخ، رقم السيارة، الاذن، الصنف، جهة التعنيف، رقم غرفة المنصرف، ايصال الشحن</b><br>
+        صف العناوين (لو موجود) هيتم تجاهله تلقائيًا في كل ورقة.
+      </p>
+      <div style="background:#fff4ed;border:1.5px solid #fbc99a;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+        <p style="margin:0;color:#b45309;font-size:0.85rem;line-height:1.7;">
+          ⚠️ <b>تنبيه هام:</b> هذا الملف لازم يحتوي على <b>كل بيانات <span id="import-modal-product-label">هذا الصنف</span> كاملة من كل الثلاجات</b>،
+          لأن الاستيراد <b>هيمسح السجلات القديمة الخاصة بـ<span id="import-modal-product-label-2">هذا الصنف</span> فقط ويستبدلها بالكامل</b> بالبيانات اللي في الملف
+          (بيانات الصنف التاني مش هتتأثر خالص). أي صفوف متطابقة تمامًا في نفس الملف
+          (رقم السيارة + التاريخ + رقم الغرفة + رقم الايصال) هيتم الاحتفاظ بواحد منها فقط تلقائيًا.
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ملف الاكسيل</label>
+        <input type="file" id="import-file-input" class="form-control" accept=".xlsx,.xlsm">
+      </div>
+      <div id="import-status" style="margin-top:10px;font-size:0.88rem;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('import-modal')">إلغاء</button>
+      <button class="btn btn-primary" id="import-submit-btn" onclick="submitImport()">⬆️ استيراد</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ مودال الايصالات المكررة ══ -->
+<div class="modal-overlay" id="duplicates-modal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header">
+      <h3>🔁 الايصالات المسجلة أكثر من مرة في فروق الأوزان</h3>
+      <button class="modal-close" onclick="closeModal('duplicates-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:60vh;overflow-y:auto;">
+      <div id="duplicates-loading" style="text-align:center;padding:30px;color:var(--text-muted);">
+        ⏳ جارٍ التحميل...
+      </div>
+      <div id="duplicates-empty" style="display:none;text-align:center;padding:40px 20px;">
+        <div style="font-size:2.6rem;margin-bottom:10px;">✅</div>
+        <h3 style="color:var(--text-muted);margin-bottom:6px;">مفيش أي ايصال مكرر</h3>
+        <p style="color:var(--text-muted);font-size:0.88rem;">كل الايصالات المسجلة في فروق الأوزان فريدة، مفيش رقم اتسجل مرتين.</p>
+      </div>
+      <div id="duplicates-content" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <p id="duplicates-summary" style="color:var(--text-secondary);font-size:0.88rem;margin:0;"></p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;color:var(--text-primary,#3a2a1e);cursor:pointer;user-select:none;">
+            <input type="checkbox" id="hide-same-date-check" onchange="renderDuplicatesTable()"
+              style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent-orange,#f97316);">
+            إخفاء التكرارات في نفس التاريخ (عرض المختلفة بالتاريخ فقط)
+          </label>
+        </div>
+        <table id="duplicates-table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">رقم الايصال</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">عدد مرات التسجيل</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">المنتج</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">التلاجة (الورقة)</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">التاريخ</th>
+              <th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border,#e8ddd0);">رقم الغرفة</th>
+            </tr>
+          </thead>
+          <tbody id="duplicates-tbody"></tbody>
+        </table>
+        <div id="duplicates-filtered-empty" style="display:none;text-align:center;padding:30px 20px;color:var(--text-muted);">
+          مفيش أي ايصال متكرر بتواريخ مختلفة — كل التكرارات الموجودة في نفس التاريخ.
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('duplicates-modal')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─── الايصالات المكررة ────────────────────────────────────────────
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+const CURRENT_TYPE = "{{ f_type }}";
+let importProductType = 'potato';
+
+function openImportModal(productType) {
+  importProductType = (productType === 'corn' || productType === 'qanater') ? productType : 'potato';
+  const label = importProductType === 'corn' ? 'الذرة 🌽'
+    : importProductType === 'qanater' ? 'استرداد من غرفة القناطر ↩️'
+    : 'البطاطس 🥔';
+  document.getElementById('import-modal-title').textContent = `⬆️ استيراد ملف ${label}`;
+  document.getElementById('import-modal-product-label').textContent = label;
+  document.getElementById('import-modal-product-label-2').textContent = label;
+  document.getElementById('import-modal-columns').textContent = importProductType === 'corn'
+    ? 'م، التاريخ، رقم السيارة، الصنف، الاذن، رقم غرفة المنصرف، جهة التعنيف، ايصال الشحن'
+    : importProductType === 'qanater'
+    ? 'ملف الثلاجات بكل ورقاته — رقم ايصال الشحن دايمًا من العمود O، واسم الموقع اللي اتصرف ليه دايمًا من العمود M. الموقع اللي اتصرف منه هيبقى ثابت: سامية صقر القناطر'
+    : 'م، التاريخ، رقم السيارة، الاذن، الصنف، جهة التعنيف، رقم غرفة المنصرف، ايصال الشحن';
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('import-status').innerHTML = '';
+  openModal('import-modal');
+}
+
+let _duplicatesCache = [];
+
+async function openDuplicatesModal() {
+  openModal('duplicates-modal');
+
+  const loading = document.getElementById('duplicates-loading');
+  const empty   = document.getElementById('duplicates-empty');
+  const content = document.getElementById('duplicates-content');
+  const tbody   = document.getElementById('duplicates-tbody');
+
+  loading.style.display = 'block';
+  empty.style.display   = 'none';
+  content.style.display = 'none';
+  tbody.innerHTML = '';
+  document.getElementById('hide-same-date-check').checked = false;
+
+  try {
+    const res = await fetch('{{ url_for("weight_diff_duplicates") }}?type=' + CURRENT_TYPE);
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    loading.style.display = 'none';
+
+    if (!data.success || !data.duplicates.length) {
+      empty.style.display = 'block';
+      return;
+    }
+
+    _duplicatesCache = data.duplicates;
+    content.style.display = 'block';
+    renderDuplicatesTable();
+  } catch (e) {
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    showToast('تعذّر الوصول للسيرفر', 'error');
+  }
+}
+
+function renderDuplicatesTable() {
+  const summary   = document.getElementById('duplicates-summary');
+  const tbody     = document.getElementById('duplicates-tbody');
+  const table     = document.getElementById('duplicates-table');
+  const filtered_empty = document.getElementById('duplicates-filtered-empty');
+  const hideSameDate = document.getElementById('hide-same-date-check').checked;
+
+  // مجموعة "مختلفة بالتاريخ" = فيها أكتر من تاريخ واحد مختلف بين التسجيلات
+  let groups = _duplicatesCache;
+  if (hideSameDate) {
+    groups = groups.filter(g => new Set(g.entries.map(e => e.receipt_date)).size > 1);
+  }
+
+  const totalOccurrences = groups.reduce((sum, g) => sum + g.count, 0);
+  if (!groups.length) {
+    summary.textContent = hideSameDate
+      ? 'لا يوجد ايصالات متكررة بتواريخ مختلفة.'
+      : 'لا يوجد ايصالات متكررة.';
+    table.style.display = 'none';
+    filtered_empty.style.display = 'block';
+    tbody.innerHTML = '';
+    return;
+  }
+  table.style.display = '';
+  filtered_empty.style.display = 'none';
+
+  summary.textContent = hideSameDate
+    ? `${groups.length} رقم ايصال متكرر بتواريخ مختلفة، بإجمالي ${totalOccurrences} تسجيل.`
+    : `${groups.length} رقم ايصال مكرر، بإجمالي ${totalOccurrences} تسجيل.`;
+
+  let rowsHtml = '';
+  groups.forEach((group, gi) => {
+    const bg = gi % 2 === 0 ? 'rgba(249,115,22,0.06)' : 'transparent';
+    group.entries.forEach((e, ei) => {
+      rowsHtml += `<tr style="background:${bg};border-bottom:1px solid var(--border,#e8ddd0);">`;
+      if (ei === 0) {
+        rowsHtml += `<td rowspan="${group.count}" style="padding:8px 10px;font-weight:700;vertical-align:top;">
+          <code style="color:var(--accent-cyan);background:rgba(0,200,255,0.1);padding:3px 10px;border-radius:6px;">${escapeHtml(group.receipt_number)}</code>
+        </td>`;
+        rowsHtml += `<td rowspan="${group.count}" style="padding:8px 10px;vertical-align:top;">
+          <span style="background:rgba(249,115,22,0.15);color:#c2410c;border-radius:20px;padding:3px 12px;font-size:0.85rem;font-weight:700;">${group.count}×</span>
+        </td>`;
+      }
+      const productBadge = e.product_type === 'corn'
+        ? '<span style="background:rgba(217,119,6,0.15);color:#b45309;border-radius:20px;padding:2px 10px;font-size:0.8rem;">🌽 ذرة</span>'
+        : e.product_type === 'qanater'
+        ? '<span style="background:rgba(139,92,246,0.15);color:#7c3aed;border-radius:20px;padding:2px 10px;font-size:0.8rem;">↩️ استرداد القناطر</span>'
+        : '<span style="background:rgba(180,120,60,0.15);color:#8a5a2b;border-radius:20px;padding:2px 10px;font-size:0.8rem;">🥔 بطاطس</span>';
+      rowsHtml += `<td style="padding:8px 10px;">${productBadge}</td>`;
+      rowsHtml += `<td style="padding:8px 10px;">🧊 ${escapeHtml(e.source_sheet)}</td>`;
+      rowsHtml += `<td style="padding:8px 10px;">📅 ${escapeHtml(e.receipt_date)}</td>`;
+      rowsHtml += `<td style="padding:8px 10px;">📍 ${escapeHtml(e.dispense_room)}</td>`;
+      rowsHtml += `</tr>`;
+    });
+  });
+  tbody.innerHTML = rowsHtml;
+}
+
+// ─── حذف كل البيانات ──────────────────────────────────────────────
+async function deleteAllRecords() {
+  const scopeLabel = CURRENT_TYPE === 'potato' ? 'سجلات البطاطس 🥔' : (CURRENT_TYPE === 'corn' ? 'سجلات الذرة 🌽' : (CURRENT_TYPE === 'qanater' ? 'سجلات استرداد القناطر ↩️' : 'كل سجلات فروق الأوزان (كل الأصناف)'));
+  if (!confirm(`⚠️ تحذير: هل أنت متأكد من حذف ${scopeLabel} بدون استثناء؟\n\nهذا الإجراء لا يمكن التراجع عنه نهائيًا.`)) return;
+  if (!confirm('تأكيد أخير: البيانات هتتمسح نهائيًا الآن. متابعة؟')) return;
+
+  try {
+    const res = await fetch('{{ url_for("delete_weight_diff_receipt_all") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ product_type: CURRENT_TYPE })
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch (e) {
+    showToast('تعذّر الوصول للسيرفر', 'error');
+  }
+}
+
+async function submitImport() {
+  const input  = document.getElementById('import-file-input');
+  const status = document.getElementById('import-status');
+  const btn    = document.getElementById('import-submit-btn');
+
+  if (!input.files || !input.files.length) {
+    status.innerHTML = '<span style="color:#dc2626;">من فضلك اختر ملف أولاً</span>';
+    return;
+  }
+
+  const productLabel = importProductType === 'corn' ? 'الذرة 🌽' : (importProductType === 'qanater' ? 'استرداد القناطر ↩️' : 'البطاطس 🥔');
+  if (!confirm(`تنبيه: هذا الاستيراد هيمسح كل سجلات ${productLabel} الحالية بس (بيانات الأصناف التانية مش هتتأثر) ويستبدلها بالكامل بالبيانات الموجودة في الملف.\n\nتأكد إن الملف يحتوي على كل البيانات كاملة${importProductType === 'qanater' ? ' من كل الثلاجات' : ''} قبل المتابعة.\n\nهل تريد المتابعة؟`)) {
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('excel_file', input.files[0]);
+  fd.append('product_type', importProductType);
+
+  btn.disabled = true;
+  btn.textContent = '⏳ جارٍ الاستيراد...';
+  status.innerHTML = '';
+
+  try {
+    const res = await fetch('{{ url_for("import_weight_diff_receipts") }}', { method: 'POST', body: fd });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      let detail = '';
+      if (data.sheets && data.sheets.length) {
+        detail += '<ul style="margin:8px 0 0;padding-right:18px;">';
+        data.sheets.forEach(s => {
+          detail += `<li>🧊 ${s.name}: ${s.inserted} صف${s.skipped ? ' (تخطي ' + s.skipped + ')' : ''}</li>`;
+        });
+        detail += '</ul>';
+      }
+      if (data.empty_sheets && data.empty_sheets.length) {
+        detail += `<div style="margin-top:6px;color:#b45309;">⚠️ ورقات فارغة/بدون بيانات: ${data.empty_sheets.join('، ')}</div>`;
+      }
+      status.innerHTML = `<span style="color:#059669;">${data.message}</span>${detail}`;
+      showToast(data.message, 'success');
+      setTimeout(() => location.reload(), 1400);
+    } else {
+      status.innerHTML = `<span style="color:#dc2626;">${data.message}</span>`;
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch (e) {
+    status.innerHTML = '<span style="color:#dc2626;">تعذّر الوصول للسيرفر</span>';
+    showToast('تعذّر الوصول للسيرفر', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '⬆️ استيراد';
+}
+
+// ─── تحديد / إلغاء الكل ───────────────────────────────────────────
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = getCheckedIds();
+  const bar     = document.getElementById('bulk-action-bar');
+  const label   = document.getElementById('bulk-count-label');
+  const selAll  = document.getElementById('select-all');
+
+  label.textContent = checked.length + ' سجل محدد';
+  bar.style.display = checked.length > 0 ? 'flex' : 'none';
+
+  const all = document.querySelectorAll('.row-check');
+  selAll.indeterminate = checked.length > 0 && checked.length < all.length;
+  selAll.checked = all.length > 0 && checked.length === all.length;
+}
+
+function getCheckedIds() {
+  return [...document.querySelectorAll('.row-check:checked')].map(cb => parseInt(cb.value));
+}
+
+function clearSelection() {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+  document.getElementById('select-all').checked = false;
+  updateBulkBar();
+}
+
+// ─── حذف فردي ─────────────────────────────────────────────────────
+async function deleteSingle(btn) {
+  const id = btn.dataset.id;
+  const receipt = btn.dataset.receipt;
+  if (!confirm(`هل تريد حذف سجل ايصال "${receipt}" من فروق الأوزان؟`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const res = await fetch(`/weight-diff-receipts/delete/${id}`, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      const row = document.getElementById(`wd-row-${id}`);
+      if (row) {
+        row.style.transition = 'opacity 0.3s, transform 0.3s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(-20px)';
+        setTimeout(() => { row.remove(); updateBulkBar(); }, 300);
+      }
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+      btn.disabled = false; btn.textContent = '🗑️ حذف';
+    }
+  } catch (e) {
+    showToast('تعذّر الوصول للسيرفر', 'error');
+    btn.disabled = false; btn.textContent = '🗑️ حذف';
+  }
+}
+
+// ─── حذف جماعي ────────────────────────────────────────────────────
+async function bulkDeleteSelected() {
+  const ids = getCheckedIds();
+  if (!ids.length) return;
+  if (!confirm(`هل تريد حذف ${ids.length} سجل من فروق الأوزان؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
+
+  const btn = document.querySelector('#bulk-action-bar .btn-danger');
+  btn.disabled = true;
+  btn.textContent = '⏳ جارٍ الحذف...';
+
+  try {
+    const res = await fetch('/weight-diff-receipts/delete-bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ ids })
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      ids.forEach(id => {
+        const row = document.getElementById(`wd-row-${id}`);
+        if (row) {
+          row.style.transition = 'opacity 0.2s';
+          row.style.opacity = '0';
+          setTimeout(() => row.remove(), 200);
+        }
+      });
+      clearSelection();
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch (e) {
+    showToast('تعذّر الوصول للسيرفر', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '🗑️ حذف المحدد';
+}
+</script>
+{% endblock %}

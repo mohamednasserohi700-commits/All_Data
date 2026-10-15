@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}يوزرات أخرى{% endblock %}
+{% block page_title %}يوزرات أخرى{% endblock %}
+{% block page_subtitle %}وحدة محمية — بيانات المستخدمين الإضافيين{% endblock %}
+
+{% block content %}
+<!-- Security Notice -->
+<div style="background: rgba(155,89,245,0.1); border: 1px solid rgba(155,89,245,0.3); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;">
+  <span style="font-size: 1.2rem;">🔐</span>
+  <div>
+    <strong style="color: var(--accent-purple);">منطقة آمنة</strong>
+    <span style="color: var(--text-secondary); font-size: 0.875rem; margin-right: 8px;">تم التحقق من الهوية بنجاح</span>
+  </div>
+  <a href="{{ url_for('secondary_logout') }}" class="btn btn-secondary btn-sm" style="margin-right: auto;">🔒 قفل الوحدة</a>
+</div>
+
+<div class="section-header">
+  <div class="section-title">
+    <h2>🔐 قائمة اليوزرات الأخرى</h2>
+    <p>إجمالي {{ users|length }} مستخدم</p>
+  </div>
+  <button class="btn btn-primary" onclick="openAddOtherUserModal()">
+    ➕ إضافة يوزر
+  </button>
+</div>
+
+<form method="GET" action="/other-users">
+  <div class="filter-bar">
+    <div class="search-bar" style="flex: 1; max-width: 400px;">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="بحث بالاسم أو GPIT أو الموقع..." class="auto-search">
+    </div>
+    {% if search %}
+    <a href="/other-users" class="btn btn-secondary btn-sm">✕ إلغاء</a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="table-card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>GPIT</th>
+          <th>اسم المستخدم</th>
+          <th>الموقع</th>
+          <th>تاريخ الإضافة</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td><span class="badge badge-purple">{{ loop.index }}</span></td>
+          <td><code style="color: var(--accent-cyan); font-size: 0.8rem;">{{ user.gpit or '—' }}</code></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 30px; height: 30px; background: linear-gradient(135deg, #9b59f5, #4f9cf9); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0;">
+                {{ user.username[0]|upper }}
+              </div>
+              <span style="color: var(--text-primary); font-weight: 600;">{{ user.username }}</span>
+            </div>
+          </td>
+          <td>
+            {% if user.location %}
+            <span class="badge badge-orange">📍 {{ user.location }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="color: var(--text-muted); font-size: 0.82rem;">{{ user.created_at[:10] if user.created_at else '—' }}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn btn-warning btn-sm" onclick="openEditOtherUserModal({{ user.id }})">✏️ تعديل</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteOtherUser({{ user.id }}, '{{ user.username }}')">🗑️ حذف</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">
+            <div class="empty-state">
+              <div class="empty-icon">🔐</div>
+              <p>لا توجد يوزرات مسجلة بعد</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="other-user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="other-user-modal-title">إضافة يوزر جديد</h3>
+      <button class="modal-close" onclick="closeModal('other-user-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="other-user-form">
+        <input type="hidden" id="other-user-id" name="id">
+        <div class="form-group">
+          <label class="form-label">GPIT</label>
+          <input type="text" class="form-control" id="other-gpit" name="gpit" placeholder="رمز GPIT">
+        </div>
+        <div class="form-group">
+          <label class="form-label">اسم المستخدم *</label>
+          <input type="text" class="form-control" id="other-username" name="username" required placeholder="اسم المستخدم">
+        </div>
+        <div class="form-group">
+          <label class="form-label">الموقع</label>
+          <input type="text" class="form-control" id="other-location" name="location" placeholder="الموقع">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('other-user-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveOtherUser()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

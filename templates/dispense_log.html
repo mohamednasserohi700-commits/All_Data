@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+{% block title %}سجل الصرف{% endblock %}
+{% block page_title %}سجل الصرف{% endblock %}
+{% block page_subtitle %}عرض كامل لجميع عمليات صرف الدفاتر{% endblock %}
+
+{% block content %}
+
+<!-- ══ إحصائيات سريعة ══ -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">📦</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.total_dispense }}</span>
+      <span class="stat-label">إجمالي عمليات الصرف</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📋</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.books_touched }}</span>
+      <span class="stat-label">صنف صُرف منه</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ stats.locations_count }}</span>
+      <span class="stat-label">موقع مختلف</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-info">
+      <span class="stat-value">{{ total_records }}</span>
+      <span class="stat-label">نتيجة الفلتر الحالي</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ شريط الفلاتر ══ -->
+<div class="table-card" style="margin-bottom:20px;padding:20px 24px;">
+  <form method="get" action="{{ url_for('dispense_log') }}" id="filter-form">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end;">
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">📋 الصنف</label>
+        <select name="book_id" class="form-control" onchange="this.form.submit()">
+          <option value="">— كل الأصناف —</option>
+          {% for b in all_books %}
+          <option value="{{ b.id }}" {% if f_book == b.id|string %}selected{% endif %}>{{ b.book_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">📍 الموقع</label>
+        <input list="locations-list" name="location" class="form-control"
+               placeholder="ابحث بالموقع..." value="{{ f_location }}">
+        <datalist id="locations-list">
+          {% for loc in all_locations %}<option value="{{ loc }}">{% endfor %}
+        </datalist>
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">📅 من تاريخ</label>
+        <input type="date" name="date_from" class="form-control" value="{{ f_date_from }}">
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">📅 إلى تاريخ</label>
+        <input type="date" name="date_to" class="form-control" value="{{ f_date_to }}">
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">🔍 بحث</label>
+        <input type="text" name="search" class="form-control"
+               placeholder="اسم الصنف، موقع، سيريال..." value="{{ f_search }}">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">🔍 بحث</button>
+        <a href="{{ url_for('dispense_log') }}" class="btn btn-secondary" style="flex:1;">↺ إعادة</a>
+      </div>
+
+    </div>
+  </form>
+</div>
+
+<!-- ══ شريط الإجراءات الجماعية ══ -->
+<div id="bulk-action-bar" style="
+  display:none;
+  background:linear-gradient(135deg,rgba(239,68,68,0.15),rgba(220,38,38,0.1));
+  border:1px solid rgba(239,68,68,0.4);
+  border-radius:12px;
+  padding:14px 20px;
+  margin-bottom:16px;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;">
+  <span id="bulk-count-label" style="color:#f87171;font-weight:700;font-size:0.95rem;">
+    0 سجل محدد
+  </span>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelected()">
+      🗑️ حذف المحدد
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="clearSelection()">
+      ✕ إلغاء التحديد
+    </button>
+  </div>
+</div>
+
+<!-- ══ header الجدول ══ -->
+<div class="section-header">
+  <div class="section-title">
+    <h2>📜 سجلات الصرف</h2>
+    <p>
+      عرض {{ records|length }} من {{ total_records }} سجل
+      {% if f_book or f_location or f_date_from or f_date_to or f_search %}
+      — <span style="color:var(--accent-orange);">فلتر نشط</span>
+      {% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <!-- تصدير Excel -->
+    <a href="{{ url_for('dispense_log') }}?book_id={{ f_book }}&location={{ f_location }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}&search={{ f_search }}&export=excel"
+       class="btn btn-success">📊 تصدير Excel</a>
+    <!-- تصدير CSV -->
+    <a href="{{ url_for('dispense_log') }}?book_id={{ f_book }}&location={{ f_location }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}&search={{ f_search }}&export=csv"
+       class="btn btn-secondary btn-sm" style="align-self:center;">📥 CSV</a>
+  </div>
+</div>
+
+<!-- ══ الجدول ══ -->
+<div class="table-card">
+  <div class="table-responsive">
+    {% if records %}
+    <table id="log-table">
+      <thead>
+        <tr>
+          <!-- تحديد الكل -->
+          <th style="width:42px;text-align:center;">
+            <input type="checkbox" id="select-all" title="تحديد الكل"
+              style="width:17px;height:17px;cursor:pointer;accent-color:var(--accent-red,#ef4444);"
+              onchange="toggleSelectAll(this.checked)">
+          </th>
+          <th>#</th>
+          <th>اسم الصنف</th>
+          <th>رقم الدفتر</th>
+          <th>السيريال من</th>
+          <th>السيريال إلى</th>
+          <th>الموقع</th>
+          <th>تاريخ الصرف</th>
+          <th>الوقت</th>
+          <th>حذف</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        {% set disp_date = r.dispensed_at[:10]   if r.dispensed_at else '—' %}
+        {% set disp_time = r.dispensed_at[11:16] if r.dispensed_at and r.dispensed_at|length > 10 else '—' %}
+        <tr id="log-row-{{ r.id }}">
+
+          <!-- checkbox -->
+          <td style="text-align:center;">
+            <input type="checkbox" class="row-check" value="{{ r.id }}"
+              style="width:17px;height:17px;cursor:pointer;accent-color:var(--accent-red,#ef4444);"
+              onchange="updateBulkBar()">
+          </td>
+
+          <!-- # -->
+          <td><span class="badge badge-blue">{{ loop.revindex + (page-1)*50 }}</span></td>
+
+          <!-- اسم الصنف -->
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:1.1rem;">❄️</span>
+              <span style="font-weight:600;color:var(--text-primary);">{{ r.book_name or '—' }}</span>
+            </div>
+          </td>
+
+          <!-- رقم الدفتر -->
+          <td>
+            {% if r.book_index %}
+            <span style="
+              display:inline-flex;align-items:center;justify-content:center;
+              background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));
+              color:#fff;border-radius:8px;padding:3px 12px;
+              font-weight:700;font-size:0.9rem;min-width:60px;">
+              دفتر {{ r.book_index }}
+            </span>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+
+          <!-- سيريال من -->
+          <td>
+            {% if r.serial_from %}
+            <code style="color:var(--accent-green);background:rgba(0,229,160,0.1);
+                         padding:3px 10px;border-radius:6px;font-size:0.85rem;font-weight:600;">
+              {{ r.serial_from }}
+            </code>
+            {% elif r.serial_number %}
+            <code style="color:var(--accent-cyan);background:rgba(0,200,255,0.1);
+                         padding:3px 10px;border-radius:6px;font-size:0.85rem;font-weight:600;">
+              {{ r.serial_number }}
+            </code>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+
+          <!-- سيريال إلى -->
+          <td>
+            {% if r.serial_to %}
+            <code style="color:var(--accent-orange);background:rgba(255,140,66,0.1);
+                         padding:3px 10px;border-radius:6px;font-size:0.85rem;font-weight:600;">
+              {{ r.serial_to }}
+            </code>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+
+          <!-- الموقع -->
+          <td>
+            {% if r.location %}
+            <span style="
+              display:inline-flex;align-items:center;gap:5px;
+              background:rgba(139,92,246,0.15);color:var(--accent-purple);
+              border:1px solid rgba(139,92,246,0.3);border-radius:20px;
+              padding:3px 12px;font-size:0.85rem;font-weight:600;">
+              📍 {{ r.location }}
+            </span>
+            {% else %}<span style="color:var(--text-muted);">—</span>{% endif %}
+          </td>
+
+          <!-- التاريخ -->
+          <td><span class="badge badge-purple">📅 {{ disp_date }}</span></td>
+
+          <!-- الوقت -->
+          <td><span style="color:var(--text-muted);font-size:0.85rem;">🕐 {{ disp_time }}</span></td>
+
+          <!-- حذف فردي -->
+          <td>
+            <button class="btn btn-danger btn-sm"
+              data-id="{{ r.id }}"
+              data-book="{{ r.book_name or '' }}"
+              data-idx="{{ r.book_index or '' }}"
+              onclick="deleteSingle(this)">
+              🗑️ حذف
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- ══ Pagination ══ -->
+    {% if total_pages > 1 %}
+    {% set bp = url_for('dispense_log') ~ '?book_id=' ~ f_book ~ '&location=' ~ f_location ~ '&date_from=' ~ f_date_from ~ '&date_to=' ~ f_date_to ~ '&search=' ~ f_search ~ '&page=' %}
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:20px;flex-wrap:wrap;">
+      {% if page > 1 %}
+      <a href="{{ bp }}{{ page-1 }}" class="btn btn-secondary btn-sm">‹ السابق</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">‹ السابق</button>
+      {% endif %}
+
+      {% for p in range(1, total_pages+1) %}
+        {% if p == page %}
+        <span class="btn btn-primary btn-sm" style="min-width:38px;">{{ p }}</span>
+        {% elif p == 1 or p == total_pages or (p >= page-2 and p <= page+2) %}
+        <a href="{{ bp }}{{ p }}" class="btn btn-secondary btn-sm" style="min-width:38px;">{{ p }}</a>
+        {% elif p == page-3 or p == page+3 %}
+        <span style="color:var(--text-muted);padding:0 4px;">…</span>
+        {% endif %}
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="{{ bp }}{{ page+1 }}" class="btn btn-secondary btn-sm">التالي ›</a>
+      {% else %}
+      <button class="btn btn-secondary btn-sm" disabled style="opacity:0.4;">التالي ›</button>
+      {% endif %}
+
+      <span style="color:var(--text-muted);font-size:0.85rem;margin-right:8px;">
+        صفحة {{ page }} من {{ total_pages }}
+      </span>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:3rem;margin-bottom:12px;">📭</div>
+      <h3 style="color:var(--text-muted);margin-bottom:8px;">لا توجد سجلات</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem;">لا يوجد أي سجلات صرف تطابق الفلتر المحدد</p>
+      <a href="{{ url_for('dispense_log') }}" class="btn btn-primary" style="margin-top:16px;">↺ إعادة ضبط الفلاتر</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─── تحديد / إلغاء الكل ───────────────────────────────────────────
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const checked = getCheckedIds();
+  const bar     = document.getElementById('bulk-action-bar');
+  const label   = document.getElementById('bulk-count-label');
+  const selAll  = document.getElementById('select-all');
+
+  label.textContent = checked.length + ' سجل محدد';
+  bar.style.display = checked.length > 0 ? 'flex' : 'none';
+
+  const all = document.querySelectorAll('.row-check');
+  selAll.indeterminate = checked.length > 0 && checked.length < all.length;
+  selAll.checked = all.length > 0 && checked.length === all.length;
+}
+
+function getCheckedIds() {
+  return [...document.querySelectorAll('.row-check:checked')].map(cb => parseInt(cb.value));
+}
+
+function clearSelection() {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+  document.getElementById('select-all').checked = false;
+  updateBulkBar();
+}
+
+// ─── حذف فردي ─────────────────────────────────────────────────────
+async function deleteSingle(btn) {
+  const id   = btn.dataset.id;
+  const book = btn.dataset.book;
+  const idx  = btn.dataset.idx;
+  const label = idx ? `دفتر ${idx} من "${book}"` : `سجل من "${book}"`;
+  if (!confirm(`هل تريد حذف ${label} من سجل الصرف؟`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const res = await fetch(`/cold-books/dispense/delete/${id}`, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    if (!res.ok) {
+      showToast(`خطأ ${res.status} — تأكد من رفع app.py الجديد وإعادة تشغيل السيرفر`, 'error');
+      btn.disabled = false; btn.textContent = '🗑️ حذف';
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      const row = document.getElementById(`log-row-${id}`);
+      if (row) {
+        row.style.transition = 'opacity 0.3s, transform 0.3s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(-20px)';
+        setTimeout(() => { row.remove(); updateBulkBar(); }, 300);
+      }
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+      btn.disabled = false; btn.textContent = '🗑️ حذف';
+    }
+  } catch(e) {
+    showToast('تعذّر الوصول للسيرفر — تأكد من رفع app.py الجديد وإعادة تشغيل السيرفر', 'error');
+    btn.disabled = false; btn.textContent = '🗑️ حذف';
+  }
+}
+
+// ─── حذف جماعي ────────────────────────────────────────────────────
+async function bulkDeleteSelected() {
+  const ids = getCheckedIds();
+  if (!ids.length) return;
+  if (!confirm(`هل تريد حذف ${ids.length} سجل من سجل الصرف؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
+
+  const btn = document.querySelector('#bulk-action-bar .btn-danger');
+  btn.disabled = true;
+  btn.textContent = '⏳ جارٍ الحذف...';
+
+  try {
+    const res = await fetch('/cold-books/dispense/delete-bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({ ids })
+    });
+    if (res.status === 401 || res.redirected) {
+      showToast('انتهت الجلسة — يرجى إعادة تسجيل الدخول', 'error');
+      setTimeout(() => location.href = '/', 1500);
+      return;
+    }
+    if (!res.ok) {
+      showToast(`خطأ ${res.status} — تأكد من رفع app.py الجديد وإعادة تشغيل السيرفر`, 'error');
+      btn.disabled = false; btn.textContent = '🗑️ حذف المحدد';
+      return;
+    }
+    const data = await res.json();
+    if (data.success) {
+      ids.forEach(id => {
+        const row = document.getElementById(`log-row-${id}`);
+        if (row) {
+          row.style.transition = 'opacity 0.2s';
+          row.style.opacity = '0';
+          setTimeout(() => row.remove(), 200);
+        }
+      });
+      clearSelection();
+      showToast(data.message, 'success');
+    } else {
+      showToast(data.message || 'حدث خطأ', 'error');
+    }
+  } catch(e) {
+    showToast('تعذّر الوصول للسيرفر — تأكد من رفع app.py الجديد وإعادة تشغيل السيرفر', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '🗑️ حذف المحدد';
+}
+
+// ─── auto-submit عند تغيير التاريخ ───────────────────────────────
+document.querySelectorAll('input[type="date"]').forEach(el => {
+  el.addEventListener('change', () => document.getElementById('filter-form').submit());
+});
+</script>
+{% endblock %}

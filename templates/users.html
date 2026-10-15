@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}GPIT Team{% endblock %}
+{% block page_title %}GPIT Team{% endblock %}
+{% block page_subtitle %}إدارة مستخدمي فريق GPIT في جميع المصانع{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="section-header">
+  <div class="section-title">
+    <h2>👥 GPIT Team</h2>
+    <p>
+      إجمالي {{ users|length }} مستخدم في
+      {% if user_type == 'october' %}مصنع أكتوبر{% else %}المصانع الأخرى{% endif %}
+    </p>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <a href="/users/export-excel?user_type={{ user_type }}" class="btn" 
+       style="background: linear-gradient(135deg,#1d6f42,#2e9b60); color:#fff; border:none; display:flex; align-items:center; gap:6px;">
+      📊 تصدير Excel
+    </a>
+    <button class="btn btn-primary" onclick="openAddUserModal()">
+      ➕ إضافة مستخدم
+    </button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div style="margin-bottom: 20px; margin-top: 4px;">
+  <div style="display: flex; gap: 0; border-bottom: 2px solid rgba(255,255,255,0.08);">
+    <a href="/users?user_type=october" style="text-decoration:none;">
+      <div style="padding: 12px 28px; border-bottom: 3px solid {% if user_type == 'october' %}var(--accent-blue){% else %}transparent{% endif %}; color: {% if user_type == 'october' %}var(--accent-blue){% else %}var(--text-muted){% endif %}; font-size: 0.95rem; font-weight: {% if user_type == 'october' %}700{% else %}600{% endif %}; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; margin-bottom: -2px;">
+        🏭 أكتوبر
+        <span style="background: {% if user_type == 'october' %}var(--accent-blue){% else %}rgba(255,255,255,0.1){% endif %}; color: {% if user_type == 'october' %}#fff{% else %}var(--text-muted){% endif %}; border-radius: 12px; padding: 1px 9px; font-size: 0.75rem;">{{ count_oct }}</span>
+      </div>
+    </a>
+    <a href="/users?user_type=other" style="text-decoration:none;">
+      <div style="padding: 12px 28px; border-bottom: 3px solid {% if user_type == 'other' %}var(--accent-blue){% else %}transparent{% endif %}; color: {% if user_type == 'other' %}var(--accent-blue){% else %}var(--text-muted){% endif %}; font-size: 0.95rem; font-weight: {% if user_type == 'other' %}700{% else %}600{% endif %}; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; margin-bottom: -2px;">
+        🏗️ المصانع الأخرى
+        <span style="background: {% if user_type == 'other' %}var(--accent-blue){% else %}rgba(255,255,255,0.1){% endif %}; color: {% if user_type == 'other' %}#fff{% else %}var(--text-muted){% endif %}; border-radius: 12px; padding: 1px 9px; font-size: 0.75rem;">{{ count_other }}</span>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Search & Filter -->
+<form method="GET" action="/users">
+  <input type="hidden" name="user_type" value="{{ user_type }}">
+  <div class="filter-bar">
+    <div class="search-bar" style="flex: 1; max-width: 400px;">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="بحث بالاسم أو GPIT أو الرقم القومي..." class="auto-search">
+    </div>
+    <select name="location" class="filter-select" onchange="this.form.submit()">
+      <option value="">كل المواقع</option>
+      {% for loc in locations %}
+      <option value="{{ loc }}" {% if location_filter == loc %}selected{% endif %}>{{ loc }}</option>
+      {% endfor %}
+    </select>
+    {% if search or location_filter %}
+    <a href="/users?user_type={{ user_type }}" class="btn btn-secondary btn-sm">✕ إلغاء الفلتر</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Table -->
+<div class="table-card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>GPIT</th>
+          <th>اسم المستخدم</th>
+          <th>الموقع</th>
+          <th>الرقم القومي</th>
+          <th>سؤال الأمان</th>
+          <th>رقم الهاتف</th>
+          <th>تاريخ التعيين</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td><span class="badge badge-blue">{{ loop.index }}</span></td>
+          <td><code style="color: var(--accent-cyan); font-size: 0.8rem;">{{ user.gpit or '—' }}</code></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width:32px;height:32px;background:var(--grad-accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0;">
+                {{ user.username[0]|upper }}
+              </div>
+              <span style="color: var(--text-primary); font-weight: 600;">{{ user.username }}</span>
+            </div>
+          </td>
+          <td>
+            {% if user.location %}<span class="badge badge-purple">📍 {{ user.location }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-family: monospace; font-size: 0.82rem;">{{ user.national_id or '—' }}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ user.security_q1 or '—' }}</td>
+          <td style="font-family: monospace; font-size: 0.85rem; color: var(--accent-cyan);">
+            {% if user.phone %}📞 {{ user.phone }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if user.hire_date %}<span class="badge badge-green">📅 {{ user.hire_date }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <div class="action-buttons">
+              <a href="/users/edit-page/{{ user.id }}" class="btn btn-warning btn-sm">✏️ تعديل</a>
+              <button class="btn btn-danger btn-sm" onclick="deleteUser({{ user.id }}, '{{ user.username|replace("'", "\\'") }}')">🗑️ حذف</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9">
+            <div class="empty-state">
+              <div class="empty-icon">{% if user_type == 'october' %}🏭{% else %}🏗️{% endif %}</div>
+              <p>لا يوجد مستخدمون مسجلون {% if user_type == 'october' %}في مصنع أكتوبر{% else %}في المصانع الأخرى{% endif %}</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ إضافة مستخدم جديد — {% if user_type == 'october' %}🏭 أكتوبر{% else %}🏗️ المصانع الأخرى{% endif %}</h3>
+      <button class="modal-close" onclick="closeModal('user-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="user-form">
+        <input type="hidden" name="user_type" value="{{ user_type }}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">GPIT</label>
+            <input type="text" class="form-control" id="user-gpit" name="gpit" placeholder="رمز GPIT">
+          </div>
+          <div class="form-group">
+            <label class="form-label">اسم المستخدم *</label>
+            <input type="text" class="form-control" id="user-username" name="username" required placeholder="الاسم الكامل">
+          </div>
+          <div class="form-group">
+            <label class="form-label">كلمة المرور *</label>
+            <input type="password" class="form-control" id="user-password" name="password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الموقع</label>
+            <input type="text" class="form-control" id="user-location" name="location" placeholder="اسم الموقع">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الرقم القومي</label>
+            <input type="text" class="form-control" id="user-national-id" name="national_id" placeholder="14 رقم">
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم الهاتف</label>
+            <input type="text" class="form-control" id="user-phone" name="phone" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="form-group">
+            <label class="form-label">تاريخ التعيين</label>
+            <input type="date" class="form-control" id="user-hire-date" name="hire_date">
+          </div>
+          <div class="form-group full">
+            <label class="form-label">سؤال الأمان</label>
+            <input type="text" class="form-control" id="user-security-q1" name="security_q1" placeholder="سؤال الأمان">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('user-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveUser()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openAddUserModal() {
+  document.getElementById('user-form').reset();
+  openModal('user-modal');
+}
+
+async function saveUser() {
+  const fd = new FormData(document.getElementById('user-form'));
+  const data = await postForm('/users/add', fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 800); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+
+async function deleteUser(uid, username) {
+  if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم "${username}"؟`)) return;
+  const data = await postForm(`/users/delete/${uid}`, new FormData());
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 700); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+</script>
+{% endblock %}

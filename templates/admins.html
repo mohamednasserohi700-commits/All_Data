@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}إدارة GPIT Team{% endblock %}
+{% block page_title %}إدارة GPIT Team{% endblock %}
+{% block page_subtitle %}التحكم الكامل في حسابات الأدمنز{% endblock %}
+
+{% block content %}
+
+<!-- Security Banner -->
+<div style="background: linear-gradient(135deg, rgba(79,156,249,0.12), rgba(155,89,245,0.08)); border: 1px solid rgba(79,156,249,0.25); border-radius: var(--radius-md); padding: 16px 22px; margin-bottom: 28px; display: flex; align-items: center; gap: 14px;">
+  <span style="font-size: 1.5rem;">🛡️</span>
+  <div>
+    <div style="font-weight: 700; color: var(--accent-blue); font-size: 0.95rem;">منطقة التحكم في الحسابات</div>
+    <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 2px;">أنت مسجل الدخول كـ <strong style="color: var(--text-secondary);">{{ session.admin_username }}</strong> — التغييرات تُطبَّق فوراً</div>
+  </div>
+  <div style="margin-right: auto; display: flex; gap: 10px; align-items: center;">
+    <div style="text-align: center; padding: 8px 18px; background: rgba(255,255,255,0.04); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+      <div style="font-size: 1.4rem; font-weight: 900; color: var(--accent-blue);">{{ admins|length }}</div>
+      <div style="font-size: 0.7rem; color: var(--text-muted);">إجمالي الحسابات</div>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="section-header">
+  <div class="section-title">
+    <h2>⚙️ حسابات مستخدمي النظام</h2>
+    <p>إدارة صلاحيات الوصول وكلمات المرور</p>
+  </div>
+  <button class="btn btn-primary" onclick="openAddAdminModal()">
+    ➕ إضافة مستخدم جديد
+  </button>
+</div>
+
+<!-- Search -->
+<form method="GET" action="/admins">
+  <div class="filter-bar">
+    <div class="search-bar" style="flex: 1; max-width: 380px;">
+      <span class="search-icon">🔍</span>
+      <input type="text" name="search" value="{{ search }}" placeholder="بحث باسم المستخدم..." class="auto-search">
+    </div>
+    {% if search %}
+    <a href="/admins" class="btn btn-secondary btn-sm">✕ إلغاء</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Admins Table -->
+<div class="table-card">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم المستخدم</th>
+          <th>الصلاحية</th>
+          <th>الحالة</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for admin in admins %}
+        <tr style="{% if admin.id == current_admin_id %}background: rgba(79,156,249,0.05); border-right: 3px solid var(--accent-blue);{% endif %}">
+          <td>
+            <span class="badge {% if admin.id == current_admin_id %}badge-blue{% else %}badge-purple{% endif %}">
+              {{ loop.index }}
+            </span>
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="
+                width: 42px; height: 42px;
+                background: {% if admin.id == current_admin_id %}var(--grad-accent){% else %}linear-gradient(135deg, rgba(155,89,245,0.6), rgba(79,156,249,0.6)){% endif %};
+                border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 1rem; font-weight: 900;
+                flex-shrink: 0;
+                box-shadow: {% if admin.id == current_admin_id %}0 0 16px rgba(79,156,249,0.4){% else %}none{% endif %};
+              ">
+                {{ admin.username[0]|upper }}
+              </div>
+              <div>
+                <div style="color: var(--text-primary); font-weight: 700; font-size: 0.95rem;">{{ admin.username }}</div>
+                <div style="font-size: 0.72rem; color: var(--text-muted);">ID: #{{ admin.id }}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="badge badge-blue">🔑 مدير النظام</span>
+          </td>
+          <td>
+            {% if admin.id == current_admin_id %}
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--accent-green); font-weight: 600;">
+              <span style="width: 8px; height: 8px; background: var(--accent-green); border-radius: 50%; display: inline-block; box-shadow: 0 0 8px var(--accent-green);"></span>
+              مسجل دخول حالياً
+            </span>
+            {% else %}
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">
+              <span style="width: 8px; height: 8px; background: var(--text-muted); border-radius: 50%; display: inline-block;"></span>
+              نشط
+            </span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn btn-warning btn-sm" onclick="openEditAdminModal({{ admin.id }}, '{{ admin.username }}')">
+                ✏️ تعديل
+              </button>
+              {% if admin.id != current_admin_id %}
+              <button class="btn btn-danger btn-sm" onclick="deleteAdmin({{ admin.id }}, '{{ admin.username }}')">
+                🗑️ حذف
+              </button>
+              {% else %}
+              <button class="btn btn-secondary btn-sm" disabled style="opacity: 0.4; cursor: not-allowed;" title="لا يمكن حذف حسابك الحالي">
+                🔒 محمي
+              </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5">
+            <div class="empty-state">
+              <div class="empty-icon">👤</div>
+              <p>لا يوجد مستخدمون</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Info Card -->
+<div style="margin-top: 24px; background: rgba(255,140,66,0.07); border: 1px solid rgba(255,140,66,0.2); border-radius: var(--radius-md); padding: 16px 20px; display: flex; gap: 12px;">
+  <span style="font-size: 1.2rem; flex-shrink: 0;">⚠️</span>
+  <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.7;">
+    <strong style="color: var(--accent-orange);">تنبيهات مهمة:</strong><br>
+    • لا يمكنك حذف حسابك الحالي المسجل دخوله<br>
+    • يجب الإبقاء على حساب واحد على الأقل في النظام<br>
+    • تغيير كلمة المرور يُطبَّق فوراً عند الحفظ<br>
+    • كلمة المرور الثانوية تُستخدم للوصول لوحدة "يوزرات أخرى"
+  </div>
+</div>
+
+<!-- ─── Modal: Add Admin ─── -->
+<div class="modal-overlay" id="admin-add-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ إضافة مستخدم نظام جديد</h3>
+      <button class="modal-close" onclick="closeModal('admin-add-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="admin-add-form">
+        <div class="form-group">
+          <label class="form-label">اسم المستخدم *</label>
+          <input type="text" class="form-control" id="add-admin-username" name="username"
+                 required placeholder="أدخل اسم المستخدم" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">كلمة المرور الرئيسية *</label>
+          <div style="position: relative;">
+            <input type="password" class="form-control" id="add-admin-password" name="password"
+                   required placeholder="••••••••" autocomplete="new-password">
+            <button type="button" onclick="togglePass('add-admin-password', this)"
+                    style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">كلمة المرور الثانوية *</label>
+          <div style="position: relative;">
+            <input type="password" class="form-control" id="add-admin-secondary" name="secondary_password"
+                   required placeholder="للوصول لوحدة اليوزرات الأخرى" autocomplete="new-password">
+            <button type="button" onclick="togglePass('add-admin-secondary', this)"
+                    style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+          </div>
+          <small style="color:var(--text-muted); font-size:0.75rem; margin-top:5px; display:block;">
+            🔐 تُستخدم للدخول على وحدة "يوزرات أخرى" المحمية
+          </small>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('admin-add-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewAdmin()">💾 إضافة المستخدم</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Modal: Edit Admin ─── -->
+<div class="modal-overlay" id="admin-edit-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="edit-admin-modal-title">✏️ تعديل بيانات المستخدم</h3>
+      <button class="modal-close" onclick="closeModal('admin-edit-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="admin-edit-form">
+        <input type="hidden" id="edit-admin-id">
+        <div class="form-group">
+          <label class="form-label">اسم المستخدم *</label>
+          <input type="text" class="form-control" id="edit-admin-username" name="username"
+                 required autocomplete="off">
+        </div>
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px;">
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;">
+            🔑 تغيير كلمات المرور — اتركها فارغة للإبقاء على الحالية
+          </div>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label">كلمة المرور الرئيسية الجديدة</label>
+            <div style="position: relative;">
+              <input type="password" class="form-control" id="edit-admin-password" name="password"
+                     placeholder="اتركها فارغة إن لم تريد تغييرها" autocomplete="new-password">
+              <button type="button" onclick="togglePass('edit-admin-password', this)"
+                      style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">كلمة المرور الثانوية الجديدة</label>
+            <div style="position: relative;">
+              <input type="password" class="form-control" id="edit-admin-secondary" name="secondary_password"
+                     placeholder="اتركها فارغة إن لم تريد تغييرها" autocomplete="new-password">
+              <button type="button" onclick="togglePass('edit-admin-secondary', this)"
+                      style="position:absolute; left:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;">👁️</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('admin-edit-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEditAdmin()">💾 حفظ التغييرات</button>
+    </div>
+  </div>
+</div>
+
+<!-- Database Backup / Restore -->
+<div class="table-card" style="margin-top: 28px; padding: 20px 24px;">
+  <div style="font-weight: 700; margin-bottom: 4px;">💾 النسخ الاحتياطي لقاعدة البيانات</div>
+  <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 16px;">تصدير كل الجداول في ملف واحد، أو استرداد نسخة سابقة (الاسترداد يستبدل كل البيانات الحالية)</div>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="/db/export" class="btn btn-success">⬇️ تصدير قاعدة البيانات</a>
+    <button type="button" class="btn btn-warning" onclick="document.getElementById('db-import-file').click()">⬆️ استرداد من ملف</button>
+    <input type="file" id="db-import-file" accept=".json,application/json" style="display:none" onchange="importDb(this)">
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function togglePass(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
+  else { input.type = 'password'; btn.textContent = '👁️'; }
+}
+
+function openAddAdminModal() {
+  document.getElementById('admin-add-form').reset();
+  openModal('admin-add-modal');
+}
+
+async function saveNewAdmin() {
+  const fd = new FormData(document.getElementById('admin-add-form'));
+  const data = await postForm('/admins/add', fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 800); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+
+function openEditAdminModal(id, username) {
+  document.getElementById('edit-admin-id').value = id;
+  document.getElementById('edit-admin-username').value = username;
+  document.getElementById('edit-admin-password').value = '';
+  document.getElementById('edit-admin-secondary').value = '';
+  document.getElementById('edit-admin-modal-title').textContent = `✏️ تعديل: ${username}`;
+  openModal('admin-edit-modal');
+}
+
+async function saveEditAdmin() {
+  const id = document.getElementById('edit-admin-id').value;
+  const fd = new FormData(document.getElementById('admin-edit-form'));
+  const data = await postForm(`/admins/edit/${id}`, fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 800); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+
+async function deleteAdmin(id, username) {
+  if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم "${username}"؟\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
+  const data = await postForm(`/admins/delete/${id}`, new FormData());
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 700); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+
+async function importDb(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!confirm(`⚠️ سيتم استبدال كل بيانات النظام الحالية بمحتوى الملف "${file.name}".\nهذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟`)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const data = await postForm('/db/import', fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.href = '/', 1500); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+</script>
+{% endblock %}

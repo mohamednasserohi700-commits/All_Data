@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم{% endblock %}
+{% block page_title %}لوحة التحكم{% endblock %}
+{% block page_subtitle %}مرحباً بك في نظام إدارة الموارد المؤسسية{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="stats-grid">
+  <div class="stat-card stat-card-1" onclick="window.location='/users'">
+    <div class="stat-icon">👥</div>
+    <div class="stat-value" data-value="{{ stats.users }}">{{ stats.users }}</div>
+    <div class="stat-label">إجمالي المستخدمين</div>
+    <div class="stat-sublabel">قاعدة بيانات المستخدمين</div>
+    <div class="stat-glow"></div>
+  </div>
+
+  <div class="stat-card stat-card-2" onclick="window.location='/sap'">
+    <div class="stat-icon">🔄</div>
+    <div class="stat-value" data-value="{{ stats.sap }}">{{ stats.sap }}</div>
+    <div class="stat-label">معاملات SAP</div>
+    <div class="stat-sublabel">إجمالي المعاملات المسجلة</div>
+    <div class="stat-glow"></div>
+  </div>
+
+  <div class="stat-card stat-card-3" onclick="window.location='/cold-books'">
+    <div class="stat-icon">📋</div>
+    <div class="stat-value" data-value="{{ stats.books }}">{{ stats.books }}</div>
+    <div class="stat-label">دفاتر + ادوات المخازن المبردة</div>
+    <div class="stat-sublabel">إجمالي الدفاتر المسجلة</div>
+    <div class="stat-glow"></div>
+  </div>
+
+  <div class="stat-card stat-card-4" onclick="window.location='/other-users'">
+    <div class="stat-icon">🔐</div>
+    <div class="stat-value" data-value="{{ stats.other_users }}">{{ stats.other_users }}</div>
+    <div class="stat-label">يوزرات أخرى</div>
+    <div class="stat-sublabel">وحدة محمية بكلمة مرور ثانوية</div>
+    <div class="stat-glow"></div>
+  </div>
+</div>
+
+<!-- تنبيهات المخزون -->
+<div id="dash-stock-alert-wrap" style="display:none;margin-bottom:20px;">
+  <div class="section-card" style="border:1px solid rgba(255,120,0,0.35);background:linear-gradient(135deg,rgba(255,80,0,0.07),rgba(20,15,10,0.01));">
+    <div class="section-card-title" style="color:#ffaa44;display:flex;align-items:center;gap:10px;">
+      <span id="dash-bell-icon" style="font-size:1.3rem;">🔔</span>
+      <span>تنبيهات المخزون — دفاتر وصلت للحد الأدنى</span>
+      <span id="dash-alert-count" style="background:rgba(255,80,0,0.2);border:1px solid rgba(255,120,0,0.4);color:#ff9900;font-size:0.78rem;padding:2px 10px;border-radius:20px;font-weight:700;margin-right:4px;"></span>
+      <a href="/cold-books" style="margin-right:auto;font-size:0.8rem;color:var(--accent-blue);text-decoration:none;">← الذهاب للدفاتر</a>
+    </div>
+    <div id="dash-stock-alerts-list" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;"></div>
+  </div>
+</div>
+
+<!-- Quick Access -->
+<div class="section-card">
+  <div class="section-card-title">⚡ الوصول السريع</div>
+  <div class="quick-links-grid">
+    <a href="/users" class="quick-link">
+      <span class="ql-icon">👤</span>
+      <span>إدارة المستخدمين</span>
+    </a>
+    <a href="/sap" class="quick-link">
+      <span class="ql-icon">🔄</span>
+      <span>معاملات SAP</span>
+    </a>
+    <a href="/other-users" class="quick-link">
+      <span class="ql-icon">🔒</span>
+      <span>يوزرات أخرى</span>
+    </a>
+    <a href="/cold-books" class="quick-link">
+      <span class="ql-icon">❄️</span>
+      <span>المخازن المبردة</span>
+    </a>
+  </div>
+</div>
+
+<!-- System Info -->
+<div class="section-card">
+  <div class="section-card-title">ℹ️ معلومات النظام</div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em;">إصدار النظام</div>
+      <div style="font-weight: 700; color: var(--accent-blue);">ERP v1.0.0</div>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em;">قاعدة البيانات</div>
+      <div style="font-weight: 700; color: var(--accent-green);">SQLite ● متصل</div>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em;">المستخدم الحالي</div>
+      <div style="font-weight: 700; color: var(--accent-purple);">{{ session.admin_username }}</div>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em;">حالة النظام</div>
+      <div style="font-weight: 700; color: var(--accent-green);">🟢 يعمل بكفاءة</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+@keyframes dashBell{0%,100%{transform:rotate(0);}10%,30%{transform:rotate(-14deg);}20%,40%{transform:rotate(14deg);}50%{transform:rotate(0);}}
+#dash-bell-icon{display:inline-block;animation:dashBell 1.8s ease-in-out infinite;}
+.dash-alert-card{background:rgba(255,100,0,0.1);border:1px solid rgba(255,130,0,0.3);border-radius:11px;padding:12px 16px;min-width:180px;flex:1;cursor:pointer;transition:all 0.2s;text-decoration:none;display:block;}
+.dash-alert-card:hover{background:rgba(255,100,0,0.17);border-color:rgba(255,160,0,0.5);transform:translateY(-2px);}
+.dash-alert-book{font-weight:700;color:var(--text-primary);font-size:0.9rem;margin-bottom:6px;}
+.dash-alert-nums{display:flex;gap:10px;font-size:0.78rem;}
+.dash-alert-remaining{color:#ff5555;font-weight:700;}
+.dash-alert-min{color:#ff9900;}
+.dash-alert-warn{color:#ffbb44;font-size:0.72rem;margin-top:5px;}
+</style>
+<script>
+(async function loadDashAlerts() {
+  try {
+    const r = await fetch('/cold-books/low-stock-alerts');
+    const d = await r.json();
+    if (!d.alerts || d.alerts.length === 0) return;
+    document.getElementById('dash-stock-alert-wrap').style.display = 'block';
+    document.getElementById('dash-alert-count').textContent = d.alerts.length + ' دفتر';
+    document.getElementById('dash-stock-alerts-list').innerHTML = d.alerts.map(a => `
+      <a href="/cold-books" class="dash-alert-card">
+        <div class="dash-alert-book">❄️ ${a.book_name}</div>
+        <div class="dash-alert-nums">
+          <span class="dash-alert-remaining">متبقي: ${a.remaining}</span>
+          <span class="dash-alert-min">حد أدنى: ${a.min_quantity}</span>
+        </div>
+        <div class="dash-alert-warn">⚠️ يُنصح بطلب توريد جديد</div>
+      </a>
+    `).join('');
+  } catch(e) {}
+})();
+</script>
+{% endblock %}
