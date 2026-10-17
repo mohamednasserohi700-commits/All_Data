@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, g
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import os
@@ -183,6 +183,10 @@ def _init_db_postgres():
             created_at TEXT {N}
         )''')
         c.execute("UPDATE users SET user_type = 'october' WHERE user_type IS NULL")
+        for _sql in ("ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions TEXT",
+                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT",
+                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS used_pages TEXT"):
+            c.execute(_sql)
         c.execute(f'''CREATE TABLE IF NOT EXISTS sap_transactions (
             id SERIAL PRIMARY KEY,
             transaction_name TEXT NOT NULL,
@@ -315,6 +319,11 @@ def _init_db_sqlite():
     except Exception:
         pass
     c.execute('UPDATE users SET user_type = "october" WHERE user_type IS NULL')
+    for _tbl, _col in (('admins', 'permissions'), ('users', 'permissions'), ('users', 'used_pages')):
+        try:
+            c.execute(f'ALTER TABLE {_tbl} ADD COLUMN {_col} TEXT')
+        except Exception:
+            pass
 
     c.execute('''CREATE TABLE IF NOT EXISTS sap_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -470,6 +479,57 @@ def login_required(f):
     return decorated
 
 
+# ─── صلاحيات الصفحات للأدمنز ────────────────────────────────────────────────
+# admins.permissions: NULL = كل الصفحات (الأدمنز القدام) — غير كده = مفاتيح الصفحات المسموحة مفصولة بفاصلة.
+PAGES = [  # (المفتاح، الاسم في القائمة، بداية المسارات المحمية)
+    ('users', 'GPIT Team', ('/users',)),
+    ('sap', 'معاملات SAP', ('/sap',)),
+    ('other_users', 'يوزرات أخرى', ('/other-users', '/secondary-auth', '/secondary-logout')),
+    ('cold_books', 'دفاتر + ادوات المخازن المبردة', ('/cold-books',)),
+    ('dispense_log', 'سجل الصرف', ('/dispense-log',)),
+    ('empty_books', 'الدفاتر الفارغة والمستخدمة', ('/empty-books',)),
+    ('receipt_inquiry', 'استعلام دفتر إيصال شحن', ('/receipt-inquiry',)),
+    ('weight_diff', 'ايصالات فروق أوزان', ('/weight-diff-receipts',)),
+    ('duplicate_receipts', 'الايصالات المكررة', ('/duplicate-receipts',)),
+    ('connected_users', 'المتصلون', ('/connected-users',)),
+    ('admins', 'إدارة الحسابات والنسخ الاحتياطي', ('/admins', '/db')),
+]
+_ALL_KEYS = [k for k, _, _ in PAGES]
+
+def _parse_perms(text):
+    """None = كل الصفحات، وإلا مجموعة المفاتيح المسموحة."""
+    return None if text is None else {p for p in text.split(',') if p}
+
+def _perms_from_form(form):
+    """يحوّل الصفحات المختارة في النموذج لقيمة التخزين (NULL لو كلها مختارة)."""
+    chosen = [k for k in _ALL_KEYS if k in form.getlist('pages')]
+    return None if len(chosen) == len(_ALL_KEYS) else ','.join(chosen)
+
+@app.before_request
+def enforce_page_permissions():
+    if 'admin_id' not in session or request.endpoint in (None, 'static'):
+        return
+    conn = get_db()
+    row = conn.execute("SELECT permissions FROM admins WHERE id=?", (session['admin_id'],)).fetchone()
+    conn.close()
+    if not row:   # الحساب اتحذف
+        session.clear()
+        return redirect(url_for('login'))
+    g.allowed = _parse_perms(row['permissions'])
+    key = next((k for k, _, ps in PAGES
+                if any(request.path == p or request.path.startswith(p + '/') for p in ps)), None)
+    if key and g.allowed is not None and key not in g.allowed:
+        if 'text/html' in request.headers.get('Accept', ''):
+            return ('<html dir="rtl"><body style="font-family:Cairo,Tahoma,sans-serif;text-align:center;padding:80px">'
+                    '<h2>⛔ ليس لديك صلاحية لهذه الصفحة</h2><p><a href="/dashboard">العودة للرئيسية</a></p></body></html>'), 403
+        return jsonify({'success': False, 'message': 'ليس لديك صلاحية لهذه الصفحة'}), 403
+
+@app.context_processor
+def inject_permissions():
+    allowed = getattr(g, 'allowed', None)
+    return {'can': lambda key: allowed is None or key in allowed,
+            'ALL_PAGES': [(k, l) for k, l, _ in PAGES]}
+
 def get_client_ip():
     forwarded = request.headers.get('X-Forwarded-For', '')
     if forwarded:
@@ -568,11 +628,13 @@ def add_user():
     d = request.form
     conn = get_db()
     user_type = d.get('user_type', 'october')
-    conn.execute("""INSERT INTO users (gpit, username, password, location, national_id, security_q1, phone, hire_date, user_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    conn.execute("""INSERT INTO users (gpit, username, password, location, national_id, security_q1, phone, hire_date, user_type,
+                                       permissions, used_pages)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                  (d.get('gpit'), d.get('username'), generate_password_hash(d.get('password', '')),
                   d.get('location'), d.get('national_id'), d.get('security_q1'),
-                  d.get('phone'), d.get('hire_date'), user_type))
+                  d.get('phone'), d.get('hire_date'), user_type,
+                  d.get('permissions', '').strip(), d.get('used_pages', '').strip()))
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'message': 'تم إضافة المستخدم بنجاح'})
@@ -586,15 +648,15 @@ def edit_user(uid):
         pw = d.get('password', '')
         if pw:
             conn.execute("""UPDATE users SET gpit=?, username=?, password=?, location=?, national_id=?,
-                            security_q1=?, phone=?, hire_date=? WHERE id=?""",
+                            security_q1=?, phone=?, hire_date=?, permissions=?, used_pages=? WHERE id=?""",
                          (d.get('gpit'), d.get('username'), generate_password_hash(pw),
                           d.get('location'), d.get('national_id'), d.get('security_q1'),
-                          d.get('phone'), d.get('hire_date'), uid))
+                          d.get('phone'), d.get('hire_date'), d.get('permissions', '').strip(), d.get('used_pages', '').strip(), uid))
         else:
             conn.execute("""UPDATE users SET gpit=?, username=?, location=?, national_id=?,
-                            security_q1=?, phone=?, hire_date=? WHERE id=?""",
+                            security_q1=?, phone=?, hire_date=?, permissions=?, used_pages=? WHERE id=?""",
                          (d.get('gpit'), d.get('username'), d.get('location'), d.get('national_id'),
-                          d.get('security_q1'), d.get('phone'), d.get('hire_date'), uid))
+                          d.get('security_q1'), d.get('phone'), d.get('hire_date'), d.get('permissions', '').strip(), d.get('used_pages', '').strip(), uid))
         conn.commit()
         conn.close()
         return jsonify({'success': True, 'message': 'تم تحديث المستخدم بنجاح'})
@@ -619,15 +681,15 @@ def edit_user_page(uid):
             return render_template('edit_user.html', user=user)
         if pw:
             conn.execute("""UPDATE users SET gpit=?, username=?, password=?, location=?, national_id=?,
-                            security_q1=?, phone=?, hire_date=? WHERE id=?""",
+                            security_q1=?, phone=?, hire_date=?, permissions=?, used_pages=? WHERE id=?""",
                          (d.get('gpit'), d.get('username'), generate_password_hash(pw),
                           d.get('location'), d.get('national_id'), d.get('security_q1'),
-                          d.get('phone'), d.get('hire_date'), uid))
+                          d.get('phone'), d.get('hire_date'), d.get('permissions', '').strip(), d.get('used_pages', '').strip(), uid))
         else:
             conn.execute("""UPDATE users SET gpit=?, username=?, location=?, national_id=?,
-                            security_q1=?, phone=?, hire_date=? WHERE id=?""",
+                            security_q1=?, phone=?, hire_date=?, permissions=?, used_pages=? WHERE id=?""",
                          (d.get('gpit'), d.get('username'), d.get('location'), d.get('national_id'),
-                          d.get('security_q1'), d.get('phone'), d.get('hire_date'), uid))
+                          d.get('security_q1'), d.get('phone'), d.get('hire_date'), d.get('permissions', '').strip(), d.get('used_pages', '').strip(), uid))
         conn.commit()
         conn.close()
         flash('تم تحديث بيانات المستخدم بنجاح ✅', 'success')
@@ -665,8 +727,8 @@ def export_users_excel():
     ws.sheet_view.rightToLeft = True
 
     headers = ["#", "GPIT", "اسم المستخدم", "الموقع", "الرقم القومي",
-               "سؤال الأمان", "رقم الهاتف", "تاريخ التعيين", "تاريخ الإضافة"]
-    col_widths = [5, 14, 22, 26, 18, 30, 16, 16, 20]
+               "سؤال الأمان", "رقم الهاتف", "تاريخ التعيين", "تاريخ الإضافة", "الصلاحيات", "الصفحات المستخدمة"]
+    col_widths = [5, 14, 22, 26, 18, 30, 16, 16, 20, 28, 28]
 
     header_fill = PatternFill("solid", fgColor="1a2744")
     header_font = Font(bold=True, color="4F9CF9", size=11)
@@ -688,7 +750,8 @@ def export_users_excel():
     for i, u in enumerate(users_list, 1):
         row_data = [i, u["gpit"] or "", u["username"] or "", u["location"] or "",
                     u["national_id"] or "", u["security_q1"] or "",
-                    u["phone"] or "", u["hire_date"] or "", (u["created_at"] or "")[:10]]
+                    u["phone"] or "", u["hire_date"] or "", (u["created_at"] or "")[:10],
+                    u["permissions"] or "", u["used_pages"] or ""]
         fill = even_fill if i % 2 == 0 else odd_fill
         for col, val in enumerate(row_data, 1):
             cell = ws.cell(row=i+1, column=col, value=val)
@@ -1745,7 +1808,7 @@ def delete_cold_book(bid):
 def admins():
     conn = get_db()
     search = request.args.get('search', '')
-    query = "SELECT id, username FROM admins WHERE 1=1"
+    query = "SELECT id, username, permissions FROM admins WHERE 1=1"
     params = []
     if search:
         query += " AND username LIKE ?"
@@ -1770,8 +1833,9 @@ def add_admin():
     if existing:
         conn.close()
         return jsonify({'success': False, 'message': 'اسم المستخدم موجود بالفعل'})
-    conn.execute("INSERT INTO admins (username, password, secondary_password) VALUES (?, ?, ?)",
-                 (username, generate_password_hash(password), generate_password_hash(secondary)))
+    conn.execute("INSERT INTO admins (username, password, secondary_password, permissions) VALUES (?, ?, ?, ?)",
+                 (username, generate_password_hash(password), generate_password_hash(secondary),
+                  _perms_from_form(d)))
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'message': 'تم إضافة المستخدم بنجاح'})
@@ -1788,6 +1852,10 @@ def edit_admin(aid):
         if not username:
             conn.close()
             return jsonify({'success': False, 'message': 'اسم المستخدم مطلوب'})
+        perms = _perms_from_form(d)
+        if aid == session['admin_id'] and perms is not None and 'admins' not in perms.split(','):
+            conn.close()
+            return jsonify({'success': False, 'message': 'لا يمكنك سحب صلاحية إدارة الحسابات من حسابك الحالي'})
         # Check username not taken by another admin
         existing = conn.execute("SELECT id FROM admins WHERE username=? AND id!=?", (username, aid)).fetchone()
         if existing:
@@ -1804,6 +1872,7 @@ def edit_admin(aid):
                          (username, generate_password_hash(secondary), aid))
         else:
             conn.execute("UPDATE admins SET username=? WHERE id=?", (username, aid))
+        conn.execute("UPDATE admins SET permissions=? WHERE id=?", (perms, aid))
         conn.commit()
         conn.close()
         return jsonify({'success': True, 'message': 'تم تحديث البيانات بنجاح'})
