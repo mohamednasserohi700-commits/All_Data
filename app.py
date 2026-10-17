@@ -1910,13 +1910,11 @@ def backup():
     conn = get_db()
     counts = [(t, conn.execute(f'SELECT COUNT(*) AS c FROM {t}').fetchone()['c']) for t in DB_TABLES]
     conn.close()
-    return render_template('backup.html', counts=counts)
+    return render_template('backup.html', counts=counts, bs=_load_backup_settings())
 
-@app.route('/db/export')
-@login_required
-def db_export():
+def _backup_payload():
+    """يبني ملف النسخة الاحتياطية (JSON واحد لكل الجداول) → (النص، وقت الإنشاء)."""
     import json
-    from flask import Response
     conn = get_db()
     try:
         tables = {t: [dict(r) for r in conn.execute(f'SELECT * FROM {t} ORDER BY id').fetchall()]
@@ -1924,8 +1922,14 @@ def db_export():
     finally:
         conn.close()
     now = _now()
-    payload = json.dumps({'format': DB_BACKUP_FORMAT, 'exported_at': now.strftime('%Y-%m-%d %H:%M:%S'),
-                          'tables': tables}, ensure_ascii=False, default=str)
+    return json.dumps({'format': DB_BACKUP_FORMAT, 'exported_at': now.strftime('%Y-%m-%d %H:%M:%S'),
+                       'tables': tables}, ensure_ascii=False, default=str), now
+
+@app.route('/db/export')
+@login_required
+def db_export():
+    from flask import Response
+    payload, now = _backup_payload()
     return Response(payload, mimetype='application/json; charset=utf-8', headers={
         'Content-Disposition': f'attachment; filename=erp_backup_{now.strftime("%Y%m%d_%H%M%S")}.json'})
 
@@ -1982,6 +1986,101 @@ def db_import():
     session.clear()   # حسابات الأدمن اتبدّلت بالنسخة → لازم دخول جديد
     return jsonify({'success': True, 'logout': True,
                     'message': 'تم استرداد قاعدة البيانات بالكامل ✅ — سيتم تحويلك لتسجيل الدخول'})
+
+# ─── نسخ احتياطي تلقائي في مجلد (بعد كل عملية إضافة/تعديل/حذف) ─────────────────
+# الإعداد محفوظ في ملف محلي (instance/backup_settings.json) — خاص بالجهاز اللي شغّال عليه البرنامج.
+import json
+import threading
+BACKUP_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'instance', 'backup_settings.json')
+AUTO_BACKUP_DELAY = 5     # ثواني: العمليات المتتالية خلال المدة دي بتتجمع في نسخة واحدة
+_AUTO_SKIP = ('/', '/logout', '/secondary-auth', '/secondary-logout')   # تسجيل دخول/خروج مش تعديل بيانات
+_auto_lock = threading.Lock()
+_auto_pending = False
+
+def _load_backup_settings():
+    try:
+        with open(BACKUP_SETTINGS_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_backup_settings(**changes):
+    st = _load_backup_settings()
+    st.update(changes)
+    os.makedirs(os.path.dirname(BACKUP_SETTINGS_FILE), exist_ok=True)
+    with open(BACKUP_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(st, f, ensure_ascii=False)
+
+def _write_backup_to_folder(folder, keep):
+    """يحفظ نسخة جديدة بتاريخها في المجلد ويحذف الأقدم ويسيب آخر keep نسخة بس."""
+    os.makedirs(folder, exist_ok=True)
+    payload, now = _backup_payload()
+    name = f'erp_backup_{now.strftime("%Y%m%d_%H%M%S")}.json'
+    tmp = os.path.join(folder, name + '.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(payload)
+    os.replace(tmp, os.path.join(folder, name))   # ملف كامل أو مفيش (مهم على مجلدات الشبكة)
+    olds = sorted(f for f in os.listdir(folder) if f.startswith('erp_backup_') and f.endswith('.json'))
+    for old in olds[:-keep]:
+        try:
+            os.remove(os.path.join(folder, old))
+        except OSError:
+            pass
+    return name
+
+def _run_auto_backup():
+    global _auto_pending
+    with _auto_lock:
+        _auto_pending = False
+    st = _load_backup_settings()
+    if not st.get('folder'):
+        return
+    stamp = _now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        _write_backup_to_folder(st['folder'], int(st.get('keep') or 30))
+        _save_backup_settings(last_ok=stamp, last_error='')
+    except Exception as e:
+        _save_backup_settings(last_error=f'{stamp} — {e}')
+
+@app.after_request
+def auto_backup_after_write(resp):
+    global _auto_pending
+    if (request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and resp.status_code < 400
+            and request.path not in _AUTO_SKIP and not request.path.startswith(('/db/', '/backup'))):
+        try:
+            body = resp.get_json(silent=True) if resp.is_json else None
+        except Exception:
+            body = None
+        failed = isinstance(body, dict) and body.get('success') is False
+        if not failed and _load_backup_settings().get('folder'):
+            with _auto_lock:
+                if not _auto_pending:
+                    _auto_pending = True
+                    t = threading.Timer(AUTO_BACKUP_DELAY, _run_auto_backup)
+                    t.daemon = True
+                    t.start()
+    return resp
+
+@app.route('/backup/settings', methods=['POST'])
+@login_required
+def backup_settings():
+    folder = request.form.get('folder', '').strip().strip('"').strip()
+    try:
+        keep = max(1, int(request.form.get('keep') or 30))
+    except ValueError:
+        keep = 30
+    if not folder:
+        _save_backup_settings(folder='', keep=keep)
+        return jsonify({'success': True, 'message': 'تم إيقاف النسخ الاحتياطي التلقائي'})
+    if os.name != 'nt' and '\\' in folder:
+        return jsonify({'success': False, 'message': 'المسار ده بصيغة Windows والسيرفر الحالي مش Windows (غالبًا Railway) — '
+                                                     'الحفظ لمجلد على جهازك أو شبكتك بيشتغل بس لما البرنامج يشتغل على جهاز Windows'})
+    try:
+        name = _write_backup_to_folder(folder, keep)   # تجربة فعلية: لو المسار غلط بيظهر الخطأ فورًا
+        _save_backup_settings(folder=folder, keep=keep, last_ok=_now().strftime('%Y-%m-%d %H:%M:%S'), last_error='')
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'تعذّر الحفظ في المسار ده: {e}'})
+    return jsonify({'success': True, 'message': f'تم الحفظ ✅ — اتعملت نسخة تجريبية: {name}'})
 
 # ─── مساعد: استخراج السنة من نص تاريخ بأي صيغة ────────────────────────────
 def extract_year(date_str):
