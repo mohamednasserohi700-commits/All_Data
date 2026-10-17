@@ -261,17 +261,6 @@
   </div>
 </div>
 
-<!-- Database Backup / Restore -->
-<div class="table-card" style="margin-top: 28px; padding: 20px 24px;">
-  <div style="font-weight: 700; margin-bottom: 4px;">💾 النسخ الاحتياطي لقاعدة البيانات</div>
-  <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 16px;">تصدير كل الجداول في ملف واحد، أو استرداد نسخة سابقة (الاسترداد يستبدل كل البيانات الحالية)</div>
-  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-    <a href="/db/export" class="btn btn-success">⬇️ تصدير قاعدة البيانات</a>
-    <button type="button" class="btn btn-warning" onclick="document.getElementById('db-import-file').click()">⬆️ استرداد من ملف</button>
-    <input type="file" id="db-import-file" accept=".json,application/json" style="display:none" onchange="importDb(this)">
-  </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -317,18 +306,6 @@ async function deleteAdmin(id, username) {
   if (!confirm(`⚠️ هل أنت متأكد من حذف المستخدم "${username}"؟\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
   const data = await postForm(`/admins/delete/${id}`, new FormData());
   if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 700); }
-  else showToast(data.message || 'حدث خطأ', 'error');
-}
-
-async function importDb(input) {
-  const file = input.files[0];
-  input.value = '';
-  if (!file) return;
-  if (!confirm(`⚠️ سيتم استبدال كل بيانات النظام الحالية بمحتوى الملف "${file.name}".\nهذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟`)) return;
-  const fd = new FormData();
-  fd.append('file', file);
-  const data = await postForm('/db/import', fd);
-  if (data.success) { showToast(data.message); setTimeout(() => location.href = '/', 1500); }
   else showToast(data.message || 'حدث خطأ', 'error');
 }
 </script>

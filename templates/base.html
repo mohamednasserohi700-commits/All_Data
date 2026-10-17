@@ -112,6 +112,12 @@
             <span>GPIT Team إدارة</span>
           </a>
           {% endif %}
+          {% if can('backup') %}
+          <a href="{{ url_for('backup') }}" class="nav-item {% if request.endpoint == 'backup' %}active{% endif %}">
+            <span class="nav-icon">💾</span>
+            <span>النسخ الاحتياطي</span>
+          </a>
+          {% endif %}
         </div>
       </nav>
 

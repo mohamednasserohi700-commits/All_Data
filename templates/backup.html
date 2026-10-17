@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}النسخ الاحتياطي{% endblock %}
+{% block page_title %}النسخ الاحتياطي{% endblock %}
+{% block page_subtitle %}تصدير واسترداد قاعدة البيانات بالكامل{% endblock %}
+
+{% block content %}
+<div class="table-card" style="padding: 20px 24px; margin-bottom: 24px;">
+  <div style="font-weight: 700; margin-bottom: 4px;">💾 النسخ الاحتياطي لقاعدة البيانات</div>
+  <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 16px;">تصدير كل الجداول في ملف واحد، أو استرداد نسخة سابقة (الاسترداد يستبدل كل البيانات الحالية ويسجّل خروجك)</div>
+  <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <a href="/db/export" class="btn btn-success">⬇️ تصدير قاعدة البيانات</a>
+    <button type="button" class="btn btn-warning" onclick="document.getElementById('db-import-file').click()">⬆️ استرداد من ملف</button>
+    <input type="file" id="db-import-file" accept=".json,application/json" style="display:none" onchange="importDb(this)">
+  </div>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead><tr><th>الجدول</th><th>عدد السجلات الحالية</th></tr></thead>
+    <tbody>
+      {% for name, n in counts %}
+      <tr><td>{{ name }}</td><td><span class="badge badge-blue">{{ n }}</span></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function importDb(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!confirm(`⚠️ سيتم استبدال كل بيانات النظام الحالية بمحتوى الملف "${file.name}".\nهذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟`)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const data = await postForm('/db/import', fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.href = '/', 1500); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+</script>
+{% endblock %}
