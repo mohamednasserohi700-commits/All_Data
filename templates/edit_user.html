@@ -107,6 +107,14 @@
         <label class="form-label">سؤال الأمان 1</label>
         <input type="text" class="form-control" name="security_q1" value="{{ user.security_q1 or '' }}" placeholder="السؤال الأول للأمان">
       </div>
+      <div class="form-group full">
+        <label class="form-label">الصلاحيات</label>
+        <input type="text" class="form-control" name="permissions" value="{{ user.permissions or '' }}" placeholder="مثال: عرض + إدخال + اعتماد">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">الصفحات / معاملات SAP المستخدمة</label>
+        <input type="text" class="form-control" name="used_pages" value="{{ user.used_pages or '' }}" placeholder="مثال: VL01N, VT01N, MIGO">
+      </div>
       <div class="form-group">
         <label class="form-label">رقم الهاتف 📞</label>
         <input type="text" class="form-control" name="phone" value="{{ user.phone or '' }}" placeholder="01xxxxxxxxx">

@@ -41,55 +41,77 @@
 
         <div class="nav-section">
           <div class="nav-section-title">الوحدات</div>
+          {% if can('users') %}
           <a href="{{ url_for('users') }}" class="nav-item {% if request.endpoint in ['users','add_user','edit_user','edit_user_page'] %}active{% endif %}">
             <span class="nav-icon">👥</span>
             <span>GPIT Team</span>
           </a>
+          {% endif %}
+          {% if can('sap') %}
           <a href="{{ url_for('sap') }}" class="nav-item {% if request.endpoint in ['sap','add_sap','edit_sap'] %}active{% endif %}">
             <span class="nav-icon">🔄</span>
             <span>معاملات SAP</span>
           </a>
+          {% endif %}
+          {% if can('other_users') %}
           <a href="{{ url_for('other_users') }}" class="nav-item {% if request.endpoint == 'other_users' %}active{% endif %}">
             <span class="nav-icon">🔐</span>
             <span>يوزرات أخرى</span>
             <span class="nav-badge">محمي</span>
           </a>
+          {% endif %}
+          {% if can('cold_books') %}
           <a href="{{ url_for('cold_books') }}" class="nav-item {% if request.endpoint in ['cold_books','add_cold_book','edit_cold_book'] %}active{% endif %}">
             <span class="nav-icon">📋</span>
             <span>دفاتر + ادوات المخازن المبردة</span>
           </a>
+          {% endif %}
+          {% if can('dispense_log') %}
           <a href="{{ url_for('dispense_log') }}" class="nav-item {% if request.endpoint == 'dispense_log' %}active{% endif %}">
             <span class="nav-icon">📜</span>
             <span>سجل الصرف</span>
           </a>
+          {% endif %}
+          {% if can('empty_books') %}
           <a href="{{ url_for('empty_books') }}" class="nav-item {% if request.endpoint == 'empty_books' %}active{% endif %}">
             <span class="nav-icon">📚</span>
             <span>الدفاتر الفارغة والمستخدمة</span>
           </a>
+          {% endif %}
+          {% if can('receipt_inquiry') %}
           <a href="{{ url_for('receipt_inquiry') }}" target="_blank" class="nav-item {% if request.endpoint == 'receipt_inquiry' %}active{% endif %}">
             <span class="nav-icon">📦</span>
             <span>استعلام دفتر إيصال شحن</span>
           </a>
+          {% endif %}
+          {% if can('weight_diff') %}
           <a href="{{ url_for('weight_diff_receipts') }}" class="nav-item {% if request.endpoint == 'weight_diff_receipts' %}active{% endif %}">
             <span class="nav-icon">⚖️</span>
             <span>ايصالات فروق أوزان</span>
           </a>
+          {% endif %}
+          {% if can('duplicate_receipts') %}
           <a href="{{ url_for('duplicate_receipts') }}" class="nav-item {% if request.endpoint == 'duplicate_receipts' %}active{% endif %}">
             <span class="nav-icon">🔁</span>
             <span>الايصالات المكررة</span>
           </a>
+          {% endif %}
+          {% if can('connected_users') %}
           <a href="{{ url_for('connected_users') }}" class="nav-item {% if request.endpoint == 'connected_users' %}active{% endif %}">
             <span class="nav-icon">👥</span>
             <span>المتصلون</span>
           </a>
+          {% endif %}
         </div>
 
         <div class="nav-section">
           <div class="nav-section-title">الإعدادات</div>
+          {% if can('admins') %}
           <a href="{{ url_for('admins') }}" class="nav-item {% if request.endpoint in ['admins','add_admin','edit_admin'] %}active{% endif %}">
             <span class="nav-icon">⚙️</span>
             <span>GPIT Team إدارة</span>
           </a>
+          {% endif %}
         </div>
       </nav>
 

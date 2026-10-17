@@ -56,22 +56,30 @@
 <div class="section-card">
   <div class="section-card-title">⚡ الوصول السريع</div>
   <div class="quick-links-grid">
+    {% if can('users') %}
     <a href="/users" class="quick-link">
       <span class="ql-icon">👤</span>
       <span>إدارة المستخدمين</span>
     </a>
+    {% endif %}
+    {% if can('sap') %}
     <a href="/sap" class="quick-link">
       <span class="ql-icon">🔄</span>
       <span>معاملات SAP</span>
     </a>
+    {% endif %}
+    {% if can('other_users') %}
     <a href="/other-users" class="quick-link">
       <span class="ql-icon">🔒</span>
       <span>يوزرات أخرى</span>
     </a>
+    {% endif %}
+    {% if can('cold_books') %}
     <a href="/cold-books" class="quick-link">
       <span class="ql-icon">❄️</span>
       <span>المخازن المبردة</span>
     </a>
+    {% endif %}
   </div>
 </div>
 
