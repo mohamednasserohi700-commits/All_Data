@@ -14,6 +14,26 @@
   </div>
 </div>
 
+<div class="table-card" style="padding: 20px 24px; margin-bottom: 24px;">
+  <div style="font-weight: 700; margin-bottom: 4px;">🔄 النسخ الاحتياطي التلقائي في مجلد</div>
+  <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 16px;">بعد أي إضافة أو تعديل أو حذف، بيتحفظ ملف نسخة كاملة في المجلد ده تلقائيًا خلال ثواني (العمليات المتتالية بتتجمع في نسخة واحدة). سيب الخانة فاضية لإيقافه.</div>
+  <div class="form-group">
+    <label class="form-label">مسار المجلد</label>
+    <input type="text" class="form-control" id="auto-folder" dir="ltr" value="{{ bs.get('folder', '') }}" placeholder="\\Server\Share\Backups">
+  </div>
+  <div class="form-group">
+    <label class="form-label">عدد النسخ المحفوظة (الأقدم بيتحذف تلقائيًا)</label>
+    <input type="number" class="form-control" id="auto-keep" min="1" value="{{ bs.get('keep', 30) }}" style="max-width:140px">
+  </div>
+  <button type="button" class="btn btn-success" onclick="saveAutoBackup()">💾 حفظ وتجربة المسار</button>
+  {% if bs.get('folder') %}
+  <div style="margin-top:14px; font-size:0.8rem;">
+    {% if bs.get('last_ok') %}<div style="color:var(--text-muted)">✅ آخر نسخة ناجحة: {{ bs.get('last_ok') }}</div>{% endif %}
+    {% if bs.get('last_error') %}<div style="color:#e5484d">⚠️ آخر خطأ: {{ bs.get('last_error') }}</div>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
 <div class="table-card">
   <table>
     <thead><tr><th>الجدول</th><th>عدد السجلات الحالية</th></tr></thead>
@@ -28,6 +48,15 @@
 
 {% block scripts %}
 <script>
+async function saveAutoBackup() {
+  const fd = new FormData();
+  fd.append('folder', document.getElementById('auto-folder').value);
+  fd.append('keep', document.getElementById('auto-keep').value);
+  const data = await postForm('/backup/settings', fd);
+  if (data.success) { showToast(data.message); setTimeout(() => location.reload(), 1200); }
+  else showToast(data.message || 'حدث خطأ', 'error');
+}
+
 async function importDb(input) {
   const file = input.files[0];
   input.value = '';
