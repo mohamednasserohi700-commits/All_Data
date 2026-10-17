@@ -492,7 +492,8 @@ PAGES = [  # (المفتاح، الاسم في القائمة، بداية ال�
     ('weight_diff', 'ايصالات فروق أوزان', ('/weight-diff-receipts',)),
     ('duplicate_receipts', 'الايصالات المكررة', ('/duplicate-receipts',)),
     ('connected_users', 'المتصلون', ('/connected-users',)),
-    ('admins', 'إدارة الحسابات والنسخ الاحتياطي', ('/admins', '/db')),
+    ('admins', 'إدارة الحسابات', ('/admins',)),
+    ('backup', 'النسخ الاحتياطي (تصدير / استرداد)', ('/backup', '/db')),
 ]
 _ALL_KEYS = [k for k, _, _ in PAGES]
 
@@ -1902,6 +1903,14 @@ def delete_admin(aid):
 DB_TABLES = ['admins', 'users', 'sap_transactions', 'other_users', 'cold_books',
              'book_dispense', 'weight_diff_receipts', 'duplicate_receipts_dismissed', 'page_visits']
 DB_BACKUP_FORMAT = 'erp-db-backup-v1'
+
+@app.route('/backup')
+@login_required
+def backup():
+    conn = get_db()
+    counts = [(t, conn.execute(f'SELECT COUNT(*) AS c FROM {t}').fetchone()['c']) for t in DB_TABLES]
+    conn.close()
+    return render_template('backup.html', counts=counts)
 
 @app.route('/db/export')
 @login_required
